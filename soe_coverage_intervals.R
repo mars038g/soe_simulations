@@ -115,7 +115,7 @@ fit_lm <- function(dat) {
               model = model))
 }
 
-n = 100 #number of simulations
+n = 10 #number of simulations
 ARsd <- .54^.5 #standard deviation
 
 
@@ -192,6 +192,12 @@ for (m in c(10,20,30)){
       newdata <- data.frame(time = newtime,
                             time2 = newtime^2)
       #gls
+      if (length(lm_out_og$model$coefficients) == 2){
+        gls_sim$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
+      } else {
+        lm_out_og$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
+        lm_out_og$model$coefficients[3] <- abs(lm_out_og$model$coefficients[3]) 
+      }
       gls_og <- AICcmodavg::predictSE(lm_out_og$model, 
                                           newdata = newdata,
                                           se.fit = T)
@@ -203,7 +209,7 @@ for (m in c(10,20,30)){
   
       #mann kendall with pre-whitening
       pw_og <- zyp.trend.vector(og$series, method = "yuepilon")
-      pw_og <- pw_og[11]+abs(og$time*pw_og)
+      pw_og <- pw_og[11]+abs(og$time*pw_og[2])
         
         for (i in 1:n){
           #generate simulations
@@ -220,12 +226,20 @@ for (m in c(10,20,30)){
           pw_sim <- zyp.trend.vector(dat$series,method='yuepilon')
           mk_sim <- MannKendall(dat$series)
           gls_sim <- try(fit_lm(dat), silent = T)
+          
+          
+          if (length(gls_sim$model$coefficients) == 2){
+            gls_sim$model$coefficients[2] <- abs(gls_sim$model$coefficients[2]) 
+          } else {
+            gls_sim$model$coefficients[2] <- abs(gls_sim$model$coefficients[2]) 
+            gls_sim$model$coefficients[3] <- abs(gls_sim$model$coefficients[3]) 
+          }
 
           
           #get model fits
-          pw_pred <- pw_sim[11]+dat$time*pw_sim[2]
+          pw_pred <- pw_sim[11]+abs(dat$time*pw_sim[2])
           mk_pred <- zyp.sen(series~time, dat)
-          mk_pred <- mk_pred$coefficients[1]+dat$time*mk_pred$coefficients[2]
+          mk_pred <- mk_pred$coefficients[1]+abs(dat$time*mk_pred$coefficients[2])
           gls_pred <- AICcmodavg::predictSE(gls_sim$model, 
                                            newdata = newdata,
                                            se.fit = T)
