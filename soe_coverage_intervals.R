@@ -2,7 +2,10 @@
 library(boot);library(Kendall)
 library(zoo);library(zyp)
 library(trend);library(dplyr)
-library(AICcmodavg)
+library(AICcmodavg);library(nlme)
+library(MASS)
+setwd('z:/shardison/soe/simulations')
+ptm <- proc.time()
 fit_lm <- function(dat) {
   # Remove missing values first so that all models
   # use the same number of observations (important for AIC)
@@ -115,7 +118,7 @@ fit_lm <- function(dat) {
               model = model))
 }
 
-n = 10 #number of simulations
+n = 500 #number of simulations
 ARsd <- .54^.5 #standard deviation
 
 
@@ -126,270 +129,300 @@ medAR <- 0.433
 strongAR <- 0.8
 
 #place holders for generated data
-series <- NULL
-mk.coverage.NOAR.notrend <- NULL
-mk.coverage.NOAR.ltrendweak <- NULL
-mk.coverage.NOAR.ltrendmed <- NULL
-mk.coverage.NOAR.ltrendstrong <- NULL
+mk.ts.NOAR.ltrendweak <- NULL
+mk.ts.NOAR.notrend <- NULL
+mk.ts.NOAR.ltrendmed <- NULL
+mk.ts.NOAR.ltrendstrong <- NULL
 
-mk.coverage.medAR.notrend <- NULL
-mk.coverage.medAR.ltrendweak <- NULL
-mk.coverage.medAR.ltrendmed <- NULL
-mk.coverage.medAR.ltrendstrong <- NULL
+mk.ts.medAR.notrend <- NULL
+mk.ts.medAR.ltrendweak <- NULL
+mk.ts.medAR.ltrendmed <- NULL
+mk.ts.medAR.ltrendstrong <- NULL
 
-mk.coverage.strongAR.notrend <- NULL
-mk.coverage.strongAR.ltrendweak <- NULL
-mk.coverage.strongAR.ltrendmed <- NULL
-mk.coverage.strongAR.ltrendstrong <- NULL
+mk.ts.strongAR.notrend <- NULL
+mk.ts.strongAR.ltrendweak <- NULL
+mk.ts.strongAR.ltrendmed <- NULL
+mk.ts.strongAR.ltrendstrong <- NULL
 
-pw.coverage.NOAR.notrend <- NULL
-pw.coverage.NOAR.ltrendweak <- NULL
-pw.coverage.NOAR.ltrendmed <- NULL
-pw.coverage.NOAR.ltrendstrong <- NULL
+pw.ts.NOAR.notrend <- NULL
+pw.ts.NOAR.ltrendweak <- NULL
+pw.ts.NOAR.ltrendmed <- NULL
+pw.ts.NOAR.ltrendstrong <- NULL
 
-pw.coverage.medAR.notrend <- NULL
-pw.coverage.medAR.ltrendweak <- NULL
-pw.coverage.medAR.ltrendmed <- NULL
-pw.coverage.medAR.ltrendstrong <- NULL
+pw.ts.medAR.notrend <- NULL
+pw.ts.medAR.ltrendweak <- NULL
+pw.ts.medAR.ltrendmed <- NULL
+pw.ts.medAR.ltrendstrong <- NULL
 
-pw.coverage.strongAR.notrend <- NULL
-pw.coverage.strongAR.ltrendweak <- NULL
-pw.coverage.strongAR.ltrendmed <- NULL
-pw.coverage.strongAR.ltrendstrong <- NULL
+pw.ts.strongAR.notrend <- NULL
+pw.ts.strongAR.ltrendweak <- NULL
+pw.ts.strongAR.ltrendmed <- NULL
+pw.ts.strongAR.ltrendstrong <- NULL
 
-gls.coverage.NOAR.notrend <- NULL
-gls.coverage.NOAR.ltrendweak <- NULL
-gls.coverage.NOAR.ltrendmed <- NULL
-gls.coverage.NOAR.ltrendstrong <- NULL
+gls.ts.NOAR.notrend <- NULL
+gls.ts.NOAR.ltrendweak <- NULL
+gls.ts.NOAR.ltrendmed <- NULL
+gls.ts.NOAR.ltrendstrong <- NULL
 
-gls.coverage.medAR.notrend <- NULL
-gls.coverage.medAR.ltrendweak <- NULL
-gls.coverage.medAR.ltrendmed <- NULL
-gls.coverage.medAR.ltrendstrong <- NULL
+gls.ts.medAR.notrend <- NULL
+gls.ts.medAR.ltrendweak <- NULL
+gls.ts.medAR.ltrendmed <- NULL
+gls.ts.medAR.ltrendstrong <- NULL
 
-gls.coverage.strongAR.notrend <- NULL
-gls.coverage.strongAR.ltrendweak <- NULL
-gls.coverage.strongAR.ltrendmed <- NULL
-gls.coverage.strongAR.ltrendstrong <- NULL
+gls.ts.strongAR.notrend <- NULL
+gls.ts.strongAR.ltrendweak <- NULL
+gls.ts.strongAR.ltrendmed <- NULL
+gls.ts.strongAR.ltrendstrong <- NULL
 
-for (m in c(10,20,30)){
+index <- NULL
+for (m in c(20)){
   notrend <- 0
   ltrendweak <- -0.262 + (0.004 * c(1:m)) 
   ltrendmed <- -0.262 + (0.051 * c(1:m)) 
   ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
-  
+  print(paste("m=",m))
   for (k in c("notrend","ltrendweak","ltrendmed","ltrendstrong")){
     
     for (j in c("NOAR","medAR","strongAR")){
-    
-      # generate original data to test coverage intervals
-      og <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd =ARsd)
+      
+      #Generate time series confidence interval for each parameter
+      og <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = ARsd)
       og <- get(k) + og
       og <- data.frame(series = og,
                        time = 1:length(og))
-      lm_out_og <- fit_lm(dat = og)
+      
       newtime <- seq(1, nrow(og), 1)
       newdata <- data.frame(time = newtime,
                             time2 = newtime^2)
-      #gls
-      if (length(lm_out_og$model$coefficients) == 2){
-        gls_sim$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
-      } else {
-        lm_out_og$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
-        lm_out_og$model$coefficients[3] <- abs(lm_out_og$model$coefficients[3]) 
+      
+      #GLS tryCatch structure - Will produce NAs for trendline if GLS throws an error
+      gls_og <- tryCatch({
+        lm_out_og <- fit_lm(dat = og)
+        
+        if (length(lm_out_og$model$coefficients) == 2){
+          lm_out_og$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
+        } else {
+          lm_out_og$model$coefficients[2] <- abs(lm_out_og$model$coefficients[2]) 
+          lm_out_og$model$coefficients[3] <- abs(lm_out_og$model$coefficients[3]) 
+        }
+        
+        gls_og <- AICcmodavg::predictSE(lm_out_og$model, 
+                                        newdata = newdata,
+                                        se.fit = T)
+        
+      } , 
+      error = function(e) {
+        print('error')
       }
-      gls_og <- AICcmodavg::predictSE(lm_out_og$model, 
-                                          newdata = newdata,
-                                          se.fit = T)
-      gls_og <- gls_og$fit
-  
+      )
+      
+      if (gls_og == "error"){
+        gls_og_fit <- rep(NA, m)
+        gls_og_se <- rep(NA, m)
+        ci_upr_gls <- rep(NA, m)
+        ci_lwr_gls <- rep(NA, m)
+      } else {
+        gls_og_fit <- gls_og$fit
+        gls_og_se <- gls_og$se.fit 
+        ci_upr_gls <- gls_og_fit + 1.96*gls_og_se
+        ci_lwr_gls <- gls_og_fit - 1.96*gls_og_se
+      }
+      
       #mann kendall
       mk_og <- zyp.sen(series~time, og)
-      mk_og <- mk_og$coefficients[1]+abs(og$time*mk_og$coefficients[2])
-  
+      mk_og <- mk_og$coefficients[1]+og$time*abs(mk_og$coefficients[2])
+      
       #mann kendall with pre-whitening
       pw_og <- zyp.trend.vector(og$series, method = "yuepilon")
-      pw_og <- pw_og[11]+abs(og$time*pw_og[2])
+      pw_og <- pw_og[11]+og$time*abs(pw_og[2])
+      
+      ##get confidence intervals from fits using a bootstrap
+      #mann kendall
+      tau_func <- function(z) MannKendall(z)$tau
+      boot.out <- tsboot(og$series, tau_func, R=999, l=5, sim="fixed")
+      ci_upr_mk <- boot.ci(boot.out, type="norm")$normal[3]
+      ci_upr_mk <- mk_og + abs(ci_upr_mk)
+      ci_lwr_mk <- boot.ci(boot.out, type="norm")$normal[2]
+      ci_lwr_mk <- mk_og - abs(ci_lwr_mk)  
+      
+      #MK-PW
+      pw_tau_func <- function(z) zyp.trend.vector(z, method = "yuepilon")[5]
+      boot.out <- tsboot(og$series, pw_tau_func, R=999, l=5, sim="fixed")
+      ci_upr_pw <- boot.ci(boot.out, type="norm")$normal[3]
+      ci_upr_pw <- pw_og + abs(ci_upr_pw)
+      ci_lwr_pw <- boot.ci(boot.out, type="norm")$normal[2]
+      ci_lwr_pw <- pw_og - abs(ci_lwr_pw)  
+      
+      for (i in 1:n){
+        #generate simulations
+        dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = ARsd)
         
-        for (i in 1:n){
-          #generate simulations
-          dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd =ARsd)
-          
-          #add autocorrelated error structure to trend
-          dat <- get(k) + dat
-          
-          #what fraction of the confidence intervals contain the original trendline?
-          dat <- data.frame(series = dat,
-                            time = 1:length(dat))
-          
-          #simulate trends
-          pw_sim <- zyp.trend.vector(dat$series,method='yuepilon')
-          mk_sim <- MannKendall(dat$series)
-          gls_sim <- try(fit_lm(dat), silent = T)
-          
-          
+        #add autocorrelated error structure to trend
+        dat <- get(k) + dat
+        
+        #what fraction of the confidence intervals contain the original trendline?
+        dat <- data.frame(series = dat,
+                          time = 1:length(dat))
+        
+        #simulate trends
+        pw_sim <- zyp.trend.vector(dat$series,method='yuepilon')
+        mk_sim <- MannKendall(dat$series)
+        
+        #GLS tryCatch structure - Will produce NAs for trendline if GLS throws an error
+        gls_sim <- tryCatch({
+          gls_sim <- fit_lm(dat = dat)
           if (length(gls_sim$model$coefficients) == 2){
             gls_sim$model$coefficients[2] <- abs(gls_sim$model$coefficients[2]) 
           } else {
             gls_sim$model$coefficients[2] <- abs(gls_sim$model$coefficients[2]) 
             gls_sim$model$coefficients[3] <- abs(gls_sim$model$coefficients[3]) 
           }
+          gls_sim <- AICcmodavg::predictSE(gls_sim$model, 
+                                          newdata = newdata,
+                                          se.fit = T)
+        }, 
+        error = function(e) {
+          print('error')
+        })
+        
+        if (gls_sim == "error"){
+          gls_pred <- rep(NA, m)
+        } else {
+          gls_pred <- gls_sim$fit #GLS trend
+        }
+        
+        #get model fits from MK and MK-PW
+        pw_pred <- pw_sim[11]+dat$time*abs(pw_sim[2])
+        mk_pred <- zyp.sen(series~time, dat)
+        mk_pred <- mk_pred$coefficients[1]+dat$time*abs(mk_pred$coefficients[2])
 
+
+        # collect the simulations inside (1) and outside (0) the coverage intervals
+        for (g in 1:m){
           
-          #get model fits
-          pw_pred <- pw_sim[11]+abs(dat$time*pw_sim[2])
-          mk_pred <- zyp.sen(series~time, dat)
-          mk_pred <- mk_pred$coefficients[1]+abs(dat$time*mk_pred$coefficients[2])
-          gls_pred <- AICcmodavg::predictSE(gls_sim$model, 
-                                           newdata = newdata,
-                                           se.fit = T)
-          gls_pred_se <- gls_pred$se.fit
-          gls_pred <- gls_pred$fit
-  
-          ##get confidence intervals from fits
-          #mann kendall
-          tau_func <- function(z) MannKendall(z)$tau
-          boot.out <- tsboot(dat$series, tau_func, R=500, l=5, sim="fixed")
-          ci_upr_mk <- boot.ci(boot.out, type="norm")$normal[3]
-          ci_upr_mk <- mk_pred + abs(ci_upr_mk)
-          ci_lwr_mk <- boot.ci(boot.out, type="norm")$normal[2]
-          ci_lwr_mk <- mk_pred - abs(ci_lwr_mk)  
+          if (is.na(gls_pred[g]) | is.na(ci_lwr_gls[g]) | is.na(ci_upr_gls[g])){
+            assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),100))
+          } else if ((gls_pred[g] < ci_upr_gls[g]) & (gls_pred[g] > ci_lwr_gls[g])){
+            assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),1))
+          } else if ((gls_pred[g] > ci_upr_gls[g]) | (gls_pred[g] < ci_lwr_gls[g])){
+            assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),0))
+          } 
           
-          #MK-PW
-          pw_tau_func <- function(z) zyp.trend.vector(z, method = "yuepilon")[5]
-          boot.out <- tsboot(dat$series, pw_tau_func, R=500, l=5, sim="fixed")
-          ci_upr_pw <- boot.ci(boot.out, type="norm")$normal[3]
-          ci_upr_pw <- pw_pred + abs(ci_upr_pw)
-          ci_lwr_pw <- boot.ci(boot.out, type="norm")$normal[2]
-          ci_lwr_pw <- pw_pred - abs(ci_lwr_pw)  
-          
-          #gls
-          ci_upr_gls <- gls_pred + 1.96*gls_pred_se
-          ci_lwr_gls <- gls_pred - 1.96*gls_pred_se
-  
-          # collect the simulations inside (1) and outside (0) the coverage intervals
-          if (all(mk_og < ci_upr_mk) & all(mk_og > ci_lwr_mk)){
-            assign(paste0("mk.coverage.",j,".",k),rbind(get(paste0("mk.coverage.",j,".",k)),1))
+          if ((mk_pred[g] < ci_upr_mk[g]) & (mk_pred[g] > ci_lwr_mk[g])){
+            assign(paste0("mk.ts.",j,".",k),rbind(get(paste0("mk.ts.",j,".",k)),1))
           } else {
-            assign(paste0("mk.coverage.",j,".",k),rbind(get(paste0("mk.coverage.", j,".",k)),0))
+            assign(paste0("mk.ts.",j,".",k),rbind(get(paste0("mk.ts.",j,".",k)),0))
           }
           
-          if (all(pw_og<ci_upr_pw) & all(pw_og > ci_lwr_pw)){
-            assign(paste0("pw.coverage.",j,".",k),rbind(get(paste0("pw.coverage.",j,".",k)),1))
+          if ((pw_pred[g] < ci_upr_pw[g]) & (pw_pred[g] > ci_lwr_pw[g])){
+            assign(paste0("pw.ts.",j,".",k),rbind(get(paste0("pw.ts.",j,".",k)),1))
           } else {
-            assign(paste0("pw.coverage.",j,".",k),rbind(get(paste0("pw.coverage.", j,".",k)),0))
+            assign(paste0("pw.ts.",j,".",k),rbind(get(paste0("pw.ts.",j,".",k)),0))
           }
           
-          if (all(gls_og<ci_upr_gls) & all(gls_og > ci_lwr_gls)){
-            assign(paste0("gls.coverage.",j,".",k),rbind(get(paste0("gls.coverage.",j,".",k)),1))
-          } else {
-            assign(paste0("gls.coverage.",j,".",k),rbind(get(paste0("gls.coverage.", j,".",k)),0))
-          }
-    
-          
+        }
+        
+        
       }
       
     } 
     
-  }  
-  
-  sim_results = data.frame(mk.NOAR.ltrendweak = mk.coverage.NOAR.ltrendweak,
-                            mk.NOAR.ltrendmed = mk.coverage.NOAR.ltrendmed,
-                            mk.NOAR.ltrendstrong = mk.coverage.NOAR.ltrendstrong,
-                            mk.NOAR.notrend = mk.coverage.NOAR.notrend,
+  }
+  sim_results = data.frame(mk.NOAR.ltrendweak = mk.ts.NOAR.ltrendweak,
+                           mk.NOAR.ltrendmed = mk.ts.NOAR.ltrendmed,
+                           mk.NOAR.ltrendstrong = mk.ts.NOAR.ltrendstrong,
+                           mk.NOAR.notrend = mk.ts.NOAR.notrend,
                            
-                            mk.medAR.ltrendweak = mk.coverage.medAR.ltrendweak,
-                            mk.medAR.ltrendmed = mk.coverage.medAR.ltrendmed,
-                            mk.medAR.ltrendstrong = mk.coverage.medAR.ltrendstrong,
-                            mk.medAR.notrend = mk.coverage.medAR.notrend,
+                           mk.medAR.ltrendweak = mk.ts.medAR.ltrendweak,
+                           mk.medAR.ltrendmed = mk.ts.medAR.ltrendmed,
+                           mk.medAR.ltrendstrong = mk.ts.medAR.ltrendstrong,
+                           mk.medAR.notrend = mk.ts.medAR.notrend,
                            
-                            mk.strongAR.ltrendweak = mk.coverage.strongAR.ltrendweak,
-                            mk.strongAR.ltrendmed = mk.coverage.strongAR.ltrendmed,
-                            mk.strongAR.ltrendstrong = mk.coverage.strongAR.ltrendstrong,
-                           mk.strongAR.notrend = mk.coverage.strongAR.notrend,
+                           mk.strongAR.ltrendweak = mk.ts.strongAR.ltrendweak,
+                           mk.strongAR.ltrendmed = mk.ts.strongAR.ltrendmed,
+                           mk.strongAR.ltrendstrong = mk.ts.strongAR.ltrendstrong,
+                           mk.strongAR.notrend = mk.ts.strongAR.notrend,
                            
-                           pw.NOAR.ltrendweak = pw.coverage.NOAR.ltrendweak,
-                           pw.NOAR.ltrendmed = pw.coverage.NOAR.ltrendmed,
-                           pw.NOAR.ltrendstrong = pw.coverage.NOAR.ltrendstrong,
-                           pw.NOAR.notrend = pw.coverage.NOAR.notrend,
+                           pw.NOAR.ltrendweak = pw.ts.NOAR.ltrendweak,
+                           pw.NOAR.ltrendmed = pw.ts.NOAR.ltrendmed,
+                           pw.NOAR.ltrendstrong = pw.ts.NOAR.ltrendstrong,
+                           pw.NOAR.notrend = pw.ts.NOAR.notrend,
                            
-                           pw.medAR.ltrendweak = pw.coverage.medAR.ltrendweak,
-                           pw.medAR.ltrendmed = pw.coverage.medAR.ltrendmed,
-                           pw.medAR.ltrendstrong = pw.coverage.medAR.ltrendstrong,
-                           pw.medAR.notrend = pw.coverage.medAR.notrend,
+                           pw.medAR.ltrendweak = pw.ts.medAR.ltrendweak,
+                           pw.medAR.ltrendmed = pw.ts.medAR.ltrendmed,
+                           pw.medAR.ltrendstrong = pw.ts.medAR.ltrendstrong,
+                           pw.medAR.notrend = pw.ts.medAR.notrend,
                            
-                           pw.strongAR.ltrendweak = pw.coverage.strongAR.ltrendweak,
-                           pw.strongAR.ltrendmed = pw.coverage.strongAR.ltrendmed,
-                           pw.strongAR.ltrendstrong = pw.coverage.strongAR.ltrendstrong,
-                           pw.strongAR.notrend = pw.coverage.strongAR.notrend,
+                           pw.strongAR.ltrendweak = pw.ts.strongAR.ltrendweak,
+                           pw.strongAR.ltrendmed = pw.ts.strongAR.ltrendmed,
+                           pw.strongAR.ltrendstrong = pw.ts.strongAR.ltrendstrong,
+                           pw.strongAR.notrend = pw.ts.strongAR.notrend,
                            
-                           gls.NOAR.ltrendweak = gls.coverage.NOAR.ltrendweak,
-                           gls.NOAR.ltrendmed = gls.coverage.NOAR.ltrendmed,
-                           gls.NOAR.ltrendstrong = gls.coverage.NOAR.ltrendstrong,
-                           gls.NOAR.notrend = gls.coverage.NOAR.notrend,
+                           gls.NOAR.ltrendweak = gls.ts.NOAR.ltrendweak,
+                           gls.NOAR.ltrendmed = gls.ts.NOAR.ltrendmed,
+                           gls.NOAR.ltrendstrong = gls.ts.NOAR.ltrendstrong,
+                           gls.NOAR.notrend = gls.ts.NOAR.notrend,
                            
-                           gls.medAR.ltrendweak = gls.coverage.medAR.ltrendweak,
-                           gls.medAR.ltrendmed = gls.coverage.medAR.ltrendmed,
-                           gls.medAR.ltrendstrong = gls.coverage.medAR.ltrendstrong,
-                           gls.medAR.notrend = gls.coverage.medAR.notrend,
+                           gls.medAR.ltrendweak = gls.ts.medAR.ltrendweak,
+                           gls.medAR.ltrendmed = gls.ts.medAR.ltrendmed,
+                           gls.medAR.ltrendstrong = gls.ts.medAR.ltrendstrong,
+                           gls.medAR.notrend = gls.ts.medAR.notrend,
                            
-                           gls.strongAR.ltrendweak = gls.coverage.strongAR.ltrendweak,
-                           gls.strongAR.ltrendmed = gls.coverage.strongAR.ltrendmed,
-                           gls.strongAR.ltrendstrong = gls.coverage.strongAR.ltrendstrong,
-                           gls.strongAR.notrend = gls.coverage.strongAR.notrend)
-  mk.coverage.NOAR.notrend <- NULL
-  mk.coverage.NOAR.ltrendweak <- NULL
-  mk.coverage.NOAR.ltrendmed <- NULL
-  mk.coverage.NOAR.ltrendstrong <- NULL
+                           gls.strongAR.ltrendweak = gls.ts.strongAR.ltrendweak,
+                           gls.strongAR.ltrendmed = gls.ts.strongAR.ltrendmed,
+                           gls.strongAR.ltrendstrong = gls.ts.strongAR.ltrendstrong,
+                           gls.strongAR.notrend = gls.ts.strongAR.notrend)
+  mk.ts.NOAR.notrend <- NULL
+  mk.ts.NOAR.ltrendweak <- NULL
+  mk.ts.NOAR.ltrendmed <- NULL
+  mk.ts.NOAR.ltrendstrong <- NULL
   
-  mk.coverage.medAR.notrend <- NULL
-  mk.coverage.medAR.ltrendweak <- NULL
-  mk.coverage.medAR.ltrendmed <- NULL
-  mk.coverage.medAR.ltrendstrong <- NULL
+  mk.ts.medAR.notrend <- NULL
+  mk.ts.medAR.ltrendweak <- NULL
+  mk.ts.medAR.ltrendmed <- NULL
+  mk.ts.medAR.ltrendstrong <- NULL
   
-  mk.coverage.strongAR.notrend <- NULL
-  mk.coverage.strongAR.ltrendweak <- NULL
-  mk.coverage.strongAR.ltrendmed <- NULL
-  mk.coverage.strongAR.ltrendstrong <- NULL
+  mk.ts.strongAR.notrend <- NULL
+  mk.ts.strongAR.ltrendweak <- NULL
+  mk.ts.strongAR.ltrendmed <- NULL
+  mk.ts.strongAR.ltrendstrong <- NULL
   
-  pw.coverage.NOAR.notrend <- NULL
-  pw.coverage.NOAR.ltrendweak <- NULL
-  pw.coverage.NOAR.ltrendmed <- NULL
-  pw.coverage.NOAR.ltrendstrong <- NULL
+  pw.ts.NOAR.notrend <- NULL
+  pw.ts.NOAR.ltrendweak <- NULL
+  pw.ts.NOAR.ltrendmed <- NULL
+  pw.ts.NOAR.ltrendstrong <- NULL
   
-  pw.coverage.medAR.notrend <- NULL
-  pw.coverage.medAR.ltrendweak <- NULL
-  pw.coverage.medAR.ltrendmed <- NULL
-  pw.coverage.medAR.ltrendstrong <- NULL
+  pw.ts.medAR.notrend <- NULL
+  pw.ts.medAR.ltrendweak <- NULL
+  pw.ts.medAR.ltrendmed <- NULL
+  pw.ts.medAR.ltrendstrong <- NULL
   
-  pw.coverage.strongAR.notrend <- NULL
-  pw.coverage.strongAR.ltrendweak <- NULL
-  pw.coverage.strongAR.ltrendmed <- NULL
-  pw.coverage.strongAR.ltrendstrong <- NULL
+  pw.ts.strongAR.notrend <- NULL
+  pw.ts.strongAR.ltrendweak <- NULL
+  pw.ts.strongAR.ltrendmed <- NULL
+  pw.ts.strongAR.ltrendstrong <- NULL
   
-  gls.coverage.NOAR.notrend <- NULL
-  gls.coverage.NOAR.ltrendweak <- NULL
-  gls.coverage.NOAR.ltrendmed <- NULL
-  gls.coverage.NOAR.ltrendstrong <- NULL
+  gls.ts.NOAR.notrend <- NULL
+  gls.ts.NOAR.ltrendweak <- NULL
+  gls.ts.NOAR.ltrendmed <- NULL
+  gls.ts.NOAR.ltrendstrong <- NULL
   
-  gls.coverage.medAR.notrend <- NULL
-  gls.coverage.medAR.ltrendweak <- NULL
-  gls.coverage.medAR.ltrendmed <- NULL
-  gls.coverage.medAR.ltrendstrong <- NULL
+  gls.ts.medAR.notrend <- NULL
+  gls.ts.medAR.ltrendweak <- NULL
+  gls.ts.medAR.ltrendmed <- NULL
+  gls.ts.medAR.ltrendstrong <- NULL
   
-  gls.coverage.strongAR.notrend <- NULL
-  gls.coverage.strongAR.ltrendweak <- NULL
-  gls.coverage.strongAR.ltrendmed <- NULL
-  gls.coverage.strongAR.ltrendstrong <- NULL
+  gls.ts.strongAR.notrend <- NULL
+  gls.ts.strongAR.ltrendweak <- NULL
+  gls.ts.strongAR.ltrendmed <- NULL
+  gls.ts.strongAR.ltrendstrong <- NULL
+
   
   names(sim_results) <- paste0(names(sim_results),'.',m)
   write.csv(sim_results, file = paste0("sim_results_",m,"_3_11.csv"))
-  rm(sim_results)
-
+  
 }
-#coverage <- colSums(sim_results)/n
 
-
-
+proc.time() - ptm
 
 
