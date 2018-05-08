@@ -11,24 +11,15 @@ library(gtools)
 setwd('c:/users/sean.hardison/desktop/simulations')
 ptm <- proc.time()
 
+#Orginial GLS function written by Charles Perretti (http://github.com/perretti)
 fit_lm <- function(dat, ar, m, ARsd, trend){
   success <- FALSE
   while(!success){
-    
-    # if (exists('phi')){
-    # dat <- trend + dat
-    # dat <- arima.sim(list(ar = ar), n=m, rand.gen=rnorm, sd = ARsd)
-    # dat <- data.frame(series = dat,
-    #                   time = 1:length(dat))
-    # 
-    # }
-    # Remove missing values first (for AIC)
     dat <- dat %>% dplyr::filter(complete.cases(.))
     
     # Constant model (null model used to calculate 
     # overall p-value)
     constant_norm <-nlme::gls(series ~ 1, data = dat)
-    
     constant_ar1 <-
       try(nlme::gls(series ~ 1,
                     data = dat,
@@ -39,9 +30,7 @@ fit_lm <- function(dat, ar, m, ARsd, trend){
                                    coefs..Intercept = NA,
                                    coefs.time = NA,
                                    coefs.time2 = NA,
-                                   pval = NA))
-      
-    }
+                                   pval = NA))}
     
     # Linear model with normal error
     linear_norm <- nlme::gls(series ~ time, data = dat)
@@ -57,10 +46,7 @@ fit_lm <- function(dat, ar, m, ARsd, trend){
                                    coefs..Intercept = NA,
                                    coefs.time = NA,
                                    coefs.time2 = NA,
-                                   pval = NA))
-      
-    }
-    
+                                   pval = NA))}
     linear_phi <- linear_ar1$modelStruct$corStruct
     linear_phi <-coef(linear_phi, unconstrained = FALSE)
     
@@ -79,10 +65,7 @@ fit_lm <- function(dat, ar, m, ARsd, trend){
                                    coefs..Intercept = NA,
                                    coefs.time = NA,
                                    coefs.time2 = NA,
-                                   pval = NA))
-      
-      
-    }
+                                   pval = NA))}
     poly_phi <- poly_ar1$modelStruct$corStruct
     poly_phi <- coef(poly_phi, unconstrained = FALSE)
     
@@ -118,19 +101,15 @@ fit_lm <- function(dat, ar, m, ARsd, trend){
     best_lm <-
       df_aicc %>%
       dplyr::filter(aicc == min(aicc))
-    #print(best_lm)
-    
+
     phi <- best_lm$phi
     success <- (phi <= 0.8 & !invalid(phi))
-    
     
     dat <- trend + dat
     dat <- arima.sim(list(ar = ar), n=m, rand.gen=rnorm, sd = ARsd)
     dat <- data.frame(series = dat,
-                      time = 1:length(dat))
-    
-  }
-  #print(best_lm$phi)
+                      time = 1:length(dat))}
+
   if (best_lm$model == "poly_norm") {
     model <- poly_norm
   } else if (best_lm$model == "poly_ar1") {
@@ -148,7 +127,6 @@ fit_lm <- function(dat, ar, m, ARsd, trend){
 set.seed(123)
 n = 100 #number of simulations
 ARsd <- .54^.5 #standard deviation
-
 
 #set phi
 NOAR <- list()
@@ -230,15 +208,10 @@ for (m in c(30)){
           #---------------------------------Coverage---------------------------------#
           for (g in 1:m){
             if (is.na(ci_lwr_gls)[g] | is.na(ci_upr_gls)[g]){
-              
               assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),100))
-             
             } else if ((true_trend[g] < ci_upr_gls[g]) & (true_trend[g] > ci_lwr_gls[g])){
-              
               assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),1))
-              
             } else if ((true_trend[g] > ci_upr_gls[g]) | (true_trend[g] < ci_lwr_gls[g])){
-              
               assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),0))
             
             }
@@ -273,31 +246,33 @@ library(tidyr)
 sims <- gather(sim_results, var, value, gls.NOAR.ltrendweak.30:gls.strongAR.notrend.30,
                  factor_key=TRUE)
 processor <- function(ar, trend, n){
-  gls_30 <- NULL
   
+  assign(paste0("gls_",n),NULL)
   assign(paste0("gls_",n),rbind(get(paste0("gls_",n)),
                                 sims[sims$var == paste0("gls.",ar,".",trend,".",n),]$value))
   gls <- sort(get(paste0("gls_",n)))
-  
   out <- data.frame(gls = gls)
-  
   return(out)
   
 }
 
 
-barplot_function <- function(ar = ar, trend = trend, trend.text = NULL,
+barplot_function <- function(ar = ar, trend = trend, trend.text = NULL,n = n,
                              product = "Percent Coverage", first  = T, lab = lab){
   #collect
-  mat_30 <- processor(ar = ar, trend = trend,n = 30)
+  assign(paste0("mat_",n),NULL)
+  mat <- processor(ar = ar, trend = trend,n = n)
   
-  #mean and sd
-  gls30 <- mean(mat_30$gls)
+  assign(paste0("mat_",n),mat) 
+  
+  #mean 
+  gls_mean <- mean(get(paste0("mat_",n)))
   
   #vector for barplot
-  vec <- c(gls30)
+  vec <- c(gls)
   loc <- c(1)
   bg <- 1
+  
   #plot
   barplot(bg,  col = "red", ylab = "",xlab = "",yaxt = 'n',xaxt = 'n')
   barplot(vec,las = 1,add = TRUE,
