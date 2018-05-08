@@ -202,7 +202,7 @@ for (m in c(10)){ #m = time series length
                            perc.strongAR.notrend = perc.ts.strongAR.notrend)
   
   names(sim_results) <- paste0(names(sim_results),'.',m)
-  #write.csv(sim_results, file = paste0("sim_results_",m,"_5_1.csv"))
+  #write.csv(sim_results, file = paste0("sen_coverage_results_",m,"_5_8.csv"))
 }
 
 final_coverage <- colMeans(sim_results)
