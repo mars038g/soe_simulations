@@ -1,8 +1,9 @@
 #GLS Coverage Intervals 5/8/2018
 #Sean Hardison
+#NEFSC - Integrated Statistics
+#5/8/2018
 
 rm(list = ls())
-#Mann kendall with pre-whitening coverage intervals
 library(boot);library(Kendall)
 library(zoo);library(zyp)
 library(trend);library(dplyr)
