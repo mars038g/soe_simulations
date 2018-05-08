@@ -8,7 +8,6 @@ library(zoo);library(zyp)
 library(trend);library(dplyr)
 library(AICcmodavg);library(nlme)
 library(gtools)
-setwd('c:/users/sean.hardison/desktop/simulations')
 ptm <- proc.time()
 
 #Orginial GLS function written by Charles Perretti (http://github.com/perretti)
@@ -269,7 +268,7 @@ barplot_function <- function(ar = ar, trend = trend, trend.text = NULL,n = n,
   gls_mean <- mean(get(paste0("mat_",n)))
   
   #vector for barplot
-  vec <- c(gls)
+  vec <- c(gls_mean)
   loc <- c(1)
   bg <- 1
   
