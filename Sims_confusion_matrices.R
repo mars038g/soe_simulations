@@ -9,6 +9,7 @@ library(scales)
 library(RColorBrewer)
 library(colorspace)
 library(mccr)
+library(cowplot)
 
 rm(list = ls())
 
@@ -192,7 +193,11 @@ ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
                                    size = 15),
         axis.ticks.y=element_blank(),
         axis.ticks.x=element_blank(),
-        plot.title = element_text(hjust = -0.1)) 
+        plot.title = element_text(hjust = -0.1),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
 
 #This piece uses color to show divergence of cells from the mean of that cell class across models
 fin_dif <- fin %>% group_by(group) %>%
@@ -310,31 +315,73 @@ mccr(gls$actual, gls$predict)
 
 #plotting MCCR across AR strengths
 df <- p_resultsm
-mccr_ar <- function(df,ar){
- z <- df[df$`AR strength` == ar,]
- z_mccr <- mccr(z$actual, z$predict)
- return(as.numeric(z_mccr))
+mccr_ar <- function(df,ar,time = NULL){
+  if(!is.null(time)){
+    z <- df[df$`timeseries length` == time,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr)) 
+  } else {
+    z <- df[df$`AR strength` == ar,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr))  
+  }
+ 
 }
 
 mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
-                ar = c("no AR","medium AR","strong AR"),
-                Test = "Mann-Kendall")
+                var = c("no AR","medium AR","strong AR"),
+                Test = "Mann-Kendall",
+                id = "AR Strength")
 mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
-                ar = c("no AR","medium AR","strong AR"),
-                Test = "MK-TFPW")
+                var = c("no AR","medium AR","strong AR"),
+                Test = "MK-TFPW",
+                id = "AR Strength")
 mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
-                 ar = c("no AR","medium AR","strong AR"),
-                 Test = "GLS")
+                 var = c("no AR","medium AR","strong AR"),
+                 Test = "GLS",
+                 id = "AR Strength")
 
-mcc <- rbind(mcc_mk, mcc_pw, mcc_gls)
+mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls)
 
-ggplot(data = mcc, aes(x = ar, y = mcc, group = Test))+
+ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
   geom_line(aes(color = Test), size = 1.1) +
   geom_point(aes(color = Test), size = 1.5) +
   scale_x_discrete(limits=c("no AR","medium AR","strong AR"))+
-  labs(x = "autocorrelation strength",
+  labs(x = "Autocorrelation strength",
        y = "MCC") +
   theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
         axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
-        axis.title.y = element_text(colour="grey20",size=17,face="plain"))
-        
+        axis.title.y = element_text(colour="grey20",size=17,face="plain"),
+        legend.position = "none")
+
+#MCCR across time series lengths
+
+mcc_mk_time <- data.frame(mcc = c(mccr_ar(mk, time = 10),mccr_ar(mk, time = 20),mccr_ar(mk, time = 30)),
+                     var = c(10,20,30),
+                     Test = "Mann-Kendall",
+                     id = "Series Length")
+mcc_pw_time <- data.frame(mcc = c(mccr_ar(pw, time = 10),mccr_ar(pw, time = 20),mccr_ar(pw, time = 30)),
+                          var = c(10,20,30),
+                     Test = "MK-TFPW",
+                     id = "Series Length")
+mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 20),mccr_ar(gls, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS",
+                      id = "Series Length")
+
+mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time)
+
+
+time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c(10,20,30))+
+  labs(x = "Series length",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain")) +
+  xlim(2.5,35)
+
+plot_grid(ar, time, align = "h", rel_widths = c(1, 1.41), labels = c("A","B"), label_fontface = 'plain')
+
