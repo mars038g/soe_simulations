@@ -8,6 +8,7 @@ library(ggplot2)
 library(scales)
 library(RColorBrewer)
 library(colorspace)
+library(mccr)
 
 rm(list = ls())
 
@@ -161,8 +162,8 @@ fin$group <- factor(paste(fin$x,fin$y))
 #Make matrices for white = good and orange = bad
 fin_dif <- fin %>% group_by(group) %>%
   mutate(val, best_dif = ifelse(group == "actual no predicted no"|
-                                  group == "actual yes predicted yes", (mean(val) - val)*-1, #best_dif is for assigning colors
-                                mean(val) - val)) 
+                                  group == "actual yes predicted yes", (abs(max(val) - val)), #best_dif is for assigning colors
+                                (abs(min(val) - val)))) 
 
 #For custom facet titles
 facet_names <- list(
@@ -171,12 +172,12 @@ facet_names <- list(
   'gls'="GLS"
 )
 
-pal <- colorRampPalette(c("darkorange","white")) #color palette
+pal <- colorRampPalette(c("white","darkorange")) #color palette
 
 #plot
 ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
   facet_grid(. ~ test, labeller = label)+
-  geom_tile(aes(size = 0.25))  +
+  geom_tile(aes(size = 0.25),color = "grey")  +
   scale_fill_gradientn(colors = pal(10))+
   geom_text(aes(x = x, y = y, label = round(val,3), size = 1.4)) +
   theme(legend.position = "none",
@@ -288,3 +289,52 @@ ggplot(data = ar_no_dif, aes(x,y, fill = mean_dif)) +
         axis.ticks.y=element_blank(),
         axis.ticks.x=element_blank(),
         plot.title = element_text(hjust = -0.1))
+
+
+#Matthew correlation coefficient
+p_resultsm <- p_results %>% mutate(`Trend strength`,
+                                   actual = plyr::mapvalues(`Trend strength`, from = c("strong trend","medium trend",
+                                                                                       "weak trend", "no trend"),
+                                             to = c(1,1,1,0))) %>%
+  mutate(predict = ifelse(Value < 0.05,1,0 ))
+
+mk <- p_resultsm[p_resultsm$method == 'mk',]
+mccr(mk$actual, mk$predict)       
+
+pw <- p_resultsm[p_resultsm$method == 'pw',]
+mccr(pw$actual, pw$predict)       
+
+gls <- p_resultsm[p_resultsm$method == 'gls',]
+mccr(gls$actual, gls$predict)       
+
+
+#plotting MCCR across AR strengths
+df <- p_resultsm
+mccr_ar <- function(df,ar){
+ z <- df[df$`AR strength` == ar,]
+ z_mccr <- mccr(z$actual, z$predict)
+ return(as.numeric(z_mccr))
+}
+
+mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
+                ar = c("no AR","medium AR","strong AR"),
+                Test = "Mann-Kendall")
+mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
+                ar = c("no AR","medium AR","strong AR"),
+                Test = "MK-TFPW")
+mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
+                 ar = c("no AR","medium AR","strong AR"),
+                 Test = "GLS")
+
+mcc <- rbind(mcc_mk, mcc_pw, mcc_gls)
+
+ggplot(data = mcc, aes(x = ar, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c("no AR","medium AR","strong AR"))+
+  labs(x = "autocorrelation strength",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain"))
+        
