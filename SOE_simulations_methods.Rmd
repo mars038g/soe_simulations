@@ -2,7 +2,9 @@
 title: "SOE Simulations Manuscript"
 author: "Sean Hardison"
 date: "June 29, 2018"
-output: html_document
+output:
+  pdf_document: default
+
 ---
 
 ```{r setup, include=FALSE}
@@ -206,6 +208,7 @@ weakAR <- 0.1
 medAR <- 0.433
 strongAR <- 0.8
 
+date <- "2018-06-29"
 x <- 30
 
 
@@ -448,7 +451,7 @@ p_results <-
 
   write.csv(p_results, file = paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
 } else if (!run){
-  p_results <- read.csv(paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
+  p_results <- read.csv(paste0(data.dir,"power_results","_",date,".csv"))
 }
 
 
@@ -478,8 +481,6 @@ ggplot(p_agg, aes(color = method, y = prop,
   theme_bw()
 
 ```
-
-
 
 
 ###GLS decile coverage simulations
@@ -622,15 +623,15 @@ if (run){
     
 }
 
-coverage_10 <- write.csv(sim_results_10, file = paste0(data.dir,"/coverage_10","_",Sys.Date(),".csv"))
-coverage_20 <- write.csv(sim_results_20, file = paste0(data.dir,"/coverage_20","_",Sys.Date(),".csv"))
-coverage_30 <- write.csv(sim_results_30, file = paste0(data.dir,"/coverage_30","_",Sys.Date(),".csv"))
+coverage_10 <- write.csv(sim_results_10, file = paste0(data.dir,"coverage_10","_",date,".csv"))
+coverage_20 <- write.csv(sim_results_20, file = paste0(data.dir,"coverage_20","_",date,".csv"))
+coverage_30 <- write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_",date,".csv"))
   
 } else if (!run){
-  date <- Sys.Date()
-  coverage_10 <- read.csv(file = paste0(data.dir,"/coverage_10","_",Sys.Date(),".csv"))
-  coverage_20 <- read.csv(file = paste0(data.dir,"/coverage_20","_",Sys.Date(),".csv"))
-  coverage_30 <- read.csv(file = paste0(data.dir,"/coverage_30","_",Sys.Date(),".csv"))
+
+  coverage_10 <- read.csv(file = paste0(data.dir,"coverage_10","_",date,".csv"))
+  coverage_20 <- read.csv(file = paste0(data.dir,"coverage_20","_",date,".csv"))
+  coverage_30 <- read.csv(file = paste0(data.dir,"coverage_30","_",date,".csv"))
 }
 print(proc.time() - ptm)
 
@@ -900,5 +901,56 @@ ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
 #         plot.title = element_text(hjust = -0.1))
 
 ```
+
+####Simulations
+Simulated time series were generated through the addition of $AR(1)$ autoregressive processes to first-order linear models:
+
+$$y = X\beta + \varepsilon_{t}, \:\: \mathrm{where} \:\: \varepsilon_{t} = \phi\varepsilon_{t-1} + \nu_{t}$$
+
+where $X$ is the $n\:\times\:p$ model matrix, $\beta$ is the trend component, and $\varepsilon_{t}$ is the $AR1$ error process; the strength of which is given by $\phi$. $\nu_{t}$ is assumed to be derived from Gaussian white noise. The levels of $\beta$ in our study were 0.004, .051, and .147, which we combined with four levels of $\phi$: 0, .43, .8, .95. These levels were chosen based on a preliminary analysis characterizing the distribution of trend and autocorrelation strengths across 2017 State of the Ecosystem time series data. 1000 simulations were implemented for all combinations of trend and autocorrelation strength.
+
+####Generalized least squares methods
+
+The Generalized Least Squares (GLS) model fitting process used here was an iterative model-selection approach, where four GLS models were fit to each simulated time series. Specifically, two first-order and two second-order (quadratic) models were used. One first-order and one second-order GLS model were specified with first-order autocorrelated error structure identical to the error process used to generate simulations. 
+
+Under $AR(1)$ error structure, the error-covariance matrix $\Sigma$ of the GLS estimator of $\beta$ is estimated by $\Sigma = \sigma^{2}P$, where $P$ is a diagonal matrix composed of error variances and autocorrelations from the data at different lag times ($\rho_{s}$).Error autocorrelations $\rho_{s}$ were estimated by restricted maximum-likelihood (REML) using the \textit{nlme} R package. The GLS estimator $b_{GLS}$ is given by
+
+$$b_{GLS} = (X'\Sigma^{-1} X)^{-1}X'\Sigma^{-1}y$$
+
+where $y$ is the response vector, and $X$ is an $n\:\times\:p$ model matrix. The covariance matrix of $b_{gls}$ is
+
+$$b_{gls} = (X'\Sigma^{-1}X)^{-1}$$
+
+The other first and second-order GLS models were specified with normal error structure, $N(\mu,\sigma^{2})$. The best fitting model for each simulation was selected based on small sample AIC (AICc), and we performed likelihood ratio tests between parameterized and null models specifying a maximum-likelihood approach to test the null of no trend given $\alpha = 0.05$.
+
+####Mann Kendall methods
+Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) (Mann 1945; Kendall 1975) and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW) (Yue et al. 2002). The Mann Kendall test is a non-parametric test for trend, and is well-known for falsely rejecting the null in the presence of autocorrelated residuals. The Mann-Kendall with trend-free pre-whitening is a step-wise procedure developed by Yue et al. 2002 to address issues in the commonly used pre-whitening technique; a way to account for residual autocorrelation when testing for trend. Kendall's tau statistic is defined by
+
+$$S = \sum_{i=1}^{n-1}\sum_{j=i+1}^{n}\textrm{sgn}(y_{j} - y_{i}),$$
+where $y$ is the response vector, $n$ is the length of the series, and
+
+$$\textrm{sgn}(x)=\begin{Bmatrix}
+1 & \textrm{if}\:x>0\\ 
+0 & \textrm{if}\:x=0\\ 
+-1 & \textrm{if}\:x<0
+\end{Bmatrix}.$$
+
+When there are no ties in the data, the variance of $S$ is given by 
+
+$$V(S) = \frac{n(n-1)(2n+5)}{18},$$
+and the distribution of $S$ when $n \geq 8$ is approximately normal and symmetric about a mean of 0. We then perform a two-sided test for trend using the standardized $Z$ statistic:
+
+$$\textrm{Z}=\begin{Bmatrix}
+\frac{S-1}{\sqrt{V(S)}} & S>0\\ 
+0 & S=0\\ 
+\frac{S+1}{\sqrt{V(S)}} & S<0\\ 
+\end{Bmatrix},$$
+
+which is drawn from a normal distribution with mean of zero and variance of one. Following Yue et al. 2002, a $P$ value for the test is determined using the standard normal cumulative distribution function
+
+$$P = \int_{\infty}^{Z}e^{-t^{2}/2}\mathrm{d}t.$$
+For significance level $\alpha$, if $Z_{a/2} > |P|$, then we reject $H_{0}$ of no trend.  
+
+
 
 
