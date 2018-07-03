@@ -3,9 +3,9 @@ title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
+  pdf_document: default
   html_document:
     df_print: paged
-  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -197,7 +197,6 @@ fit_lm <- function(dat, ar, m, ARsd, trend, spec = FALSE){
 ```
 
 ##Methods
-
 ####Simulations
 Simulated time series were generated through the addition of $AR(1)$ autoregressive processes to first-order linear models:
 
@@ -250,25 +249,42 @@ For significance level $\alpha$, if $Z_{a/2} > |P|$, then we reject $H_{0}$ of n
 
 ####Mann-Kendall trend-free pre-whitening (MK-TFPW)
 The Mann Kendall trend-free pre-whitening procedure as developed by Yue et al. 2002 is composed of four steps:
-\begin{enumerate}
-\item \textit{Removal of trend} - The slope of trend $b$ is estimated using the Theil-Sen estimator (Theil 1950a-c; Sen 1968) and removed from sample data if different from zero, where $b$ is given by
-$$b = \mathrm{Median}\left (\frac{X_{j} - X_{i}}{j - l}\right)\forall l < j .$$
+
+```{r render list, results='asis', eval = T, echo = F}
+
+if(knitr::is_latex_output()){
+  cat("\\begin{enumerate}\\item \\textit{Removal of trend} - The slope of trend $b$ is estimated using the Theil-Sen estimator (Theil 1950a-c; Sen 1968) and removed from sample data if different from zero, where $b$ is given by
+$$b = \\mathrm{Median}\\left (\\frac{X_{j} - X_{i}}{j - l}\\right)\\forall l < j .$$
 Trend $b$ is removed from the series by
-
 $$X_{t}^{'} = X_{t} - bt,$$
-
 where $X_{t}$ is the original series at time step $t$.
-
-\item \textit{Trend-free pre-whitening} - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\rho_{1}$ is computed using 
-
-$$\rho_{k} = \frac{  \frac{1}{n-k} \sum_{t=1}^{n-k}[X_{t} - E(X_{t})][X_{t+k} - E(X_{t})]}  {\frac{1}{n}\sum_{t=1}^{n}[X_{t} - E(X_{t})]^2},$$
-where $E(X_{t})$ is the mean of the series and $\rho_{k}$ is the lag-$k$ autocorrelation coefficient. Serial correlation is then removed from the detrended series $X_{t}^{'}$ by 
-$$Y_{t}^{'} = X_{t}^{'} - \rho_{1}X_{t}^{'}.$$
-\item \textit{Blending trend and residual series} - Trend $b$ is added to the independent residual series $Y_{t}^{'}$ by 
+\\item \\textit{Trend-free pre-whitening} - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\\rho_{1}$ is computed using 
+$$\\rho_{k} = \\frac{  \\frac{1}{n-k} \\sum_{t=1}^{n-k}[X_{t} - E(X_{t})][X_{t+k} - E(X_{t})]}  {\\frac{1}{n}\\sum_{t=1}^{n}[X_{t} - E(X_{t})]^2},$$
+where $E(X_{t})$ is the mean of the series and $\\rho_{k}$ is the lag-$k$ autocorrelation coefficient. Serial correlation is then removed from the detrended series $X_{t}^{'}$ by 
+$$Y_{t}^{'} = X_{t}^{'} - \\rho_{1}X_{t}^{'}.$$
+\\item \\textit{Blending trend and residual series} - Trend $b$ is added to the independent residual series $Y_{t}^{'}$ by 
 $$Y_{t} = Y_{t}^{'} + bt.$$
-\item \textit{MK test} - Trend is assessed through the application of the Mann Kendall test as discussed above.
+\\item \\textit{MK test} - Trend is assessed through the application of the Mann Kendall test as discussed above.
 
-\end{enumerate}
+\\end{enumerate}")
+} else if (knitr::is_html_output()){
+    cat("1. *Removal of trend* - The slope of trend $b$ is estimated using the Theil-Sen estimator (Theil 1950a-c; Sen 1968) and removed from sample data if different from zero, where $b$ is given by
+$$b = \\mathrm{Median}\\left (\\frac{X_{j} - X_{i}}{j - l}\\right)\\forall l < j .$$
+Trend $b$ is removed from the series by
+$$X_{t}^{'} = X_{t} - bt,$$
+where $X_{t}$ is the original series at time step $t$.
+2. *Trend-free pre-whitening* - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\\rho_{1}$ is computed using 
+$$\\rho_{k} = \\frac{  \\frac{1}{n-k} \\sum_{t=1}^{n-k}[X_{t} - E(X_{t})][X_{t+k} - E(X_{t})]}  {\\frac{1}{n}\\sum_{t=1}^{n}[X_{t} - E(X_{t})]^2},$$
+where $E(X_{t})$ is the mean of the series and $\\rho_{k}$ is the lag-$k$ autocorrelation coefficient. Serial correlation is then removed from the detrended series $X_{t}^{'}$ by 
+$$Y_{t}^{'} = X_{t}^{'} - \\rho_{1}X_{t}^{'}.$$
+3. *Blending trend and residual series* - Trend $b$ is added to the independent residual series $Y_{t}^{'}$ by 
+$$Y_{t} = Y_{t}^{'} + bt.$$
+4. *MK test* - Trend is assessed through the application of the Mann Kendall test as discussed above.")
+}
+
+```
+
+
 
 
 ##Results
@@ -286,8 +302,6 @@ strongAR <- 0.8
 
 date <- "2018-06-29"
 x <- 30
-
-
 ```
 
 
