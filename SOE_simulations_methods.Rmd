@@ -1,10 +1,11 @@
 ---
 title: "SOE Simulations Manuscript"
-author: "Sean Hardison"
+author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
+  html_document:
+    df_print: paged
   pdf_document: default
-
 ---
 
 ```{r setup, include=FALSE}
