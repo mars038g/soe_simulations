@@ -290,7 +290,7 @@ x <- 30
 ```
 
 
-##Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
+####Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
 ```{r assessing model power, echo = F}
 if (run){
   # Trend parameters are from fitting a linear model to the
@@ -558,7 +558,8 @@ ggplot(p_agg, aes(color = method, y = prop,
 ```
 
 
-###GLS decile coverage simulations
+####GLS decile coverage simulations
+
 ```{r decile coverage simulations, echo = F}
 
 #placeholders for results
@@ -713,7 +714,6 @@ coverage_30 <- write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_
 
 ```
 
-##Plotting decile coverage of GLS confidence intervals
 ```{r decile coverage plots, echo = F, fig.align='center'}
 
 #---------------------------Process data--------------------------#
@@ -767,7 +767,7 @@ ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
 
 ```
 
-
+####Confusion matrices and Matthew's correlation coefficient
 ```{r confusion matrices, echo = F, fig.align='center'}
 
 label <- function(variable,value){
@@ -976,5 +976,91 @@ ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
 #         axis.ticks.x=element_blank(),
 #         plot.title = element_text(hjust = -0.1))
 
+```
+
+```{r MCCR, echo = F, fig.align='center',fig.width = 8, fig.height= 3.25}
+#Matthew correlation coefficient
+p_resultsm <- p_results %>% mutate(Trend.strength,
+                                   actual = plyr::mapvalues(Trend.strength, from = c("strong trend","medium trend",
+                                                                                       "weak trend", "no trend"),
+                                             to = c(1,1,1,0))) %>%
+  mutate(predict = ifelse(Value < 0.05,1,0 ))
+
+mk <- p_resultsm[p_resultsm$method == 'mk',]
+pw <- p_resultsm[p_resultsm$method == 'pw',]
+gls <- p_resultsm[p_resultsm$method == 'gls',]
+
+#plotting MCCR across AR strengths
+df <- p_resultsm
+mccr_ar <- function(df,ar,time = NULL){
+  if(!is.null(time)){
+    z <- df[df$timeseries.length == time,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr)) 
+  } else {
+    z <- df[df$AR.strength == ar,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr))  
+  }
+ 
+}
+
+mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
+                var = c("no AR","med. AR AR","strong AR"),
+                Test = "Mann-Kendall",
+                id = "AR Strength")
+mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
+                var = c("no AR","med. AR","strong AR"),
+                Test = "MK-TFPW",
+                id = "AR Strength")
+mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
+                 var = c("no AR","med. AR","strong AR"),
+                 Test = "GLS",
+                 id = "AR Strength")
+
+mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls)
+
+ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c("no AR","med. AR","strong AR"))+
+  labs(x = "Autocorrelation strength",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=11,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain"),
+        legend.position = "none")
+
+#MCCR across time series lengths
+
+mcc_mk_time <- data.frame(mcc = c(mccr_ar(mk, time = 10),mccr_ar(mk, time = 20),mccr_ar(mk, time = 30)),
+                     var = c(10,20,30),
+                     Test = "Mann-Kendall",
+                     id = "Series Length")
+mcc_pw_time <- data.frame(mcc = c(mccr_ar(pw, time = 10),mccr_ar(pw, time = 20),mccr_ar(pw, time = 30)),
+                          var = c(10,20,30),
+                     Test = "MK-TFPW",
+                     id = "Series Length")
+mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 20),mccr_ar(gls, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS",
+                      id = "Series Length")
+
+mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time)
+
+
+time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c(10,20,30))+
+  labs(x = "Series length",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain")) +
+  xlim(5,35)
+
+plot_grid(ar, time, align = "h", rel_widths = c(1, 1.51), labels = c("A","B"),
+          label_x = c(0.225,0.15),label_fontface = 'plain')
 ```
 
