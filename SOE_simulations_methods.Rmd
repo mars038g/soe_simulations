@@ -4,27 +4,48 @@ author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
   pdf_document: default
-  html_document:
+  html_document: 
     df_print: paged
 ---
 
 ```{r setup, include=FALSE}
-data.dir <- '~/soe_simulations/data.dir/'
+# rmarkdown::render("SOE_simulations_methods.Rmd", "all") # for both pdf and html
+
+#data.dir <- '~/soe_simulations/data.dir/'
+data.dir <- paste0(getwd(),"/data.dir/")
 knitr::opts_chunk$set(
 	echo = TRUE,
 	message = FALSE,
 	warning = FALSE
 )
-library(boot);library(Kendall)
-library(zoo);library(zyp)
-library(trend);library(dplyr)
-library(AICcmodavg);library(nlme)
-library(gtools);library(tidyr)
-library(stringr);library(ggplot2)
-library(data.table)
-library(scales);library(RColorBrewer)
-library(colorspace);library(mccr)
-library(cowplot)
+
+# list of all packages required
+packages <- c("stringi","boot","tinytex","Kendall","zoo","zyp","trend","dplyr","AICcmodavg","nlme",
+                      "gtools","tidyr","stringr","ggplot2","data.table","scales",
+                      "RColorBrewer","colorspace","mccr","cowplot")
+# may need to downgrade to rmarkdown 1.8.
+# may need packages upquote, microtype, url, titling,mptopdf
+
+installLoadPackages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) 
+        install.packages(new.pkg, dependencies = TRUE,repos='http://cran.us.r-project.org')
+    sapply(pkg, require, character.only = TRUE)
+}
+
+installLoadPackages(packages)
+
+#
+# library(boot);library(Kendall)
+# library(zoo);library(zyp)
+# library(trend);library(dplyr)
+# library(AICcmodavg);library(nlme)
+# library(gtools);library(tidyr)
+# library(stringr);library(ggplot2)
+# library(data.table)
+# library(scales);library(RColorBrewer)
+# library(colorspace);library(mccr)
+# library(cowplot)
 
 ```
 
@@ -538,8 +559,8 @@ p_results <-
                                        levels = c("no AR",
                                                   "medium AR",
                                                   "strong AR")))
-
-  write.csv(p_results, file = paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
+print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
+  write.csv(p_results, file = paste0(data.dir,"power_results","_",Sys.Date(),".csv"))
 } else if (!run){
   p_results <- read.csv(paste0(data.dir,"power_results","_",date,".csv"))
 }
