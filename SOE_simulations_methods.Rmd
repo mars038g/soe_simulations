@@ -3,9 +3,9 @@ title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
-  pdf_document: default
   html_document:
     df_print: paged
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -249,7 +249,6 @@ For significance level $\alpha$, if $Z_{a/2} > |P|$, then we reject $H_{0}$ of n
 
 ####Mann-Kendall trend-free pre-whitening (MK-TFPW)
 The Mann Kendall trend-free pre-whitening procedure as developed by Yue et al. 2002 is composed of four steps:
-
 ```{r render list, results='asis', eval = T, echo = F}
 
 if(knitr::is_latex_output()){
