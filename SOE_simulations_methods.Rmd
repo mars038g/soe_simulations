@@ -3,9 +3,9 @@ title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
-  pdf_document: default
   html_document: 
     df_print: paged
+  pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
@@ -215,6 +215,79 @@ fit_lm <- function(dat, ar, m, ARsd, trend, spec = FALSE){
   return(list(best_lm = best_lm, 
               model = model))
 }
+
+
+#----------------------------------GLS Bootstrap function-------------------------------#gls_boot <- function(series){
+gls_boot <- function(series){  
+  series <- series
+  data <- data.frame(y = series,
+                     x = 1:length(series))
+  
+  # allocate memory to a bunch of vectors
+  LRstat <- vector(mode="numeric",length=nBootSims) # likelihood ratio statistic
+  pVal_boot <- vector(mode="numeric",length=nsims) # pvalue for bootstrap
+  pValChi2 <- vector(mode="numeric",length=nsims) # pvalue for chi sq
+  
+  # fit under the null (beta = 0) and the alternative (estimate beta)
+  glsObjNull <- nlme::gls(y ~ 1,data=data, correlation = nlme::corAR1(form= ~x),method="ML")
+  glsObjAlt <- nlme::gls(y ~ x,data=data, correlation = nlme::corAR1(form= ~x),method="ML")
+  
+  # likelihood ratio statistic
+  LRstat[1] <- -2*(glsObjNull$logLik- glsObjAlt$logLik)
+  # pvalue using chi quare approximation
+  pValChi2[i] <- 1-pchisq(LRstat[1],1) # uses distributional theory
+  
+  # these are estimates of a, sigma and rho under the null. We need these to do the bootstrap
+  alphaEst <- glsObjNull$coefficients[1]
+  sigmaEst <- glsObjNull$sigma
+  rhoEst <- coef(glsObjNull$modelStruct$corStruct,unconstrained=FALSE)
+  
+  # bootstrapping. simulate and fit nBootSims samples
+  for (iboot in 2:nBootSims) {
+    
+    # simulate under Null
+    # you already have your own simulation method, use that
+    # uses the parameter estimates above - fitting under the null
+    bootdata <- arima.sim(get(k), n=x, rand.gen=rnorm, sd = ARsd)
+    bootdata <- data.frame(y = bootdata,
+                           x = 1:length(bootdata))
+    # fit under null and alt
+    # i think you call y = series and x = time. You'll need to change that
+    # i also simulate with alpha (the intercept) = 0, i dont think you do. In that case you will remove the "-1" 
+    # from the calls to gls
+    glsObjBootNull <- nlme::gls(y ~ 1,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+    glsObjBootAlt <- nlme::gls(y ~ x,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+    
+    # calculate and store the likelihood ratio statistic for each bootstrapped sample
+    LRstat[iboot] <- -2*(glsObjBootNull$logLik- glsObjBootAlt$logLik)
+  } # end bootstrap loop
+  
+  # now we can calculate the p-value based on the bootstrapping
+  pVal_boot[i] <- sum(LRstat >= LRstat[1])/nBootSims
+  return(pVal_boot[i])
+}
+
+
+
+#wide to long function (Sean Lucey)
+w2l <- function(x, by, by.name = 'Time', value.name = 'Value'){
+  x.new <- copy(x)
+  var.names <- names(x)[which(names(x) != by)]
+  out <- c()
+  setnames(x.new, by, 'by')
+  for(i in 1:length(var.names)){
+    setnames(x.new, var.names[i], 'V1')
+    single.var <- x.new[, list(by, V1)]
+    single.var[, Var := var.names[i]]
+    out <- rbindlist(list(out, single.var))
+    setnames(x.new, 'V1', var.names[i])
+  }
+  setnames(x.new, 'by', by)
+  setnames(out, c('by', 'V1'), c(by.name, value.name))
+}
+
+
+
 ```
 
 ##Methods
@@ -310,13 +383,13 @@ $$Y_{t} = Y_{t}^{'} + bt.$$
 ##Results
 ```{r constants for simulations, echo = F}
 set.seed(123)
-run <- F #Run simulations or pull from previous results
+run <- T #Run simulations or pull from previous results
 
-nsims = 500 #number of simulations
+nsims = 2 #number of simulations
+nBootSims <- 500 #number of bootstrap samples
 ARsd <- .54^.5 #standard deviation of innovations
 
 NOAR <- list()
-weakAR <- 0.1
 medAR <- 0.433
 strongAR <- 0.8
 
@@ -396,13 +469,14 @@ for (i in 1:nsims) {
       #Testing 30 year series with prewhitening Mann-Kendall technique
       TEMP_TEST1 <- zyp.trend.vector(get(y),method='yuepilon')
       TEMP_P1 <- unlist(TEMP_TEST1[6])
-      TEMP_TREND1 <- unlist(TEMP_TEST1[3])
-      T_1 <- cbind(TEMP_P1,TEMP_TREND1)
-      #30 year standard Mann-Kendall
-      TEMP_TEST12 <- zyp.trend.vector(get(y),method='zhang')
-      T_2 <- unlist(TEMP_TEST12[6])
-      # 30-year linear model
+      T_1 <- cbind(TEMP_P1)
       
+      #30 year standard Mann-Kendall
+      TEMP_TEST12 <- MannKendall(get(y))
+      T_2 <- unlist(TEMP_TEST12[2])
+
+      
+      # 30-year linear model
       if (y == "TEMP1"){
         trend <- rep(0,x)
       } else if (y == "LTEMP1"){
@@ -423,68 +497,73 @@ for (i in 1:nsims) {
                                          time = 1:length(get(y))), trend = trend,
                          ar = unlist(get(k)),m = x, ARsd = ARsd)
       }
-      
-      
-      
-      
       T_lm <- TEMP_lm$best_lm$pval
       
+      #GLS boot method
+      T_gls_boot <- gls_boot(series = get(y))
       
-      for (j in c(10,20)) {
+      for (j in c(20,10)) {
         #Testind 20 & 10 year series with prewhitening Mann-Kendall technique
         TEMP_TEST2 <- zyp.trend.vector(get(y)[j:x],method='yuepilon')
         TEMP_P2 <- unlist(TEMP_TEST2[6])
-        TEMP_TREND2 <- unlist(TEMP_TEST2[3])
-        T_1 <- cbind(T_1,TEMP_P2,TEMP_TREND2)
+        T_1 <- cbind(T_1,TEMP_P2)
+        
         #Now standard Mann_Kendall
-        TEMP_TEST22 <- zyp.trend.vector(get(y)[j:x],method='zhang')
-        TEMP_P22 <- unlist(TEMP_TEST22[6])
+        TEMP_TEST22 <- MannKendall(get(y)[j:x])
+        TEMP_P22 <- unlist(TEMP_TEST22[2])
         T_2 <- cbind(T_2,TEMP_P22)
+        
         # 20-year and 10-year linear model
-      
-      if (k == "NOAR"){
-        TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
-                                           time = 1:length(get(y)[j:x])),
-                          spec = TRUE, trend = trend, ar = unlist(get(k)),
-                          m = length(get(y)[j:x]), ARsd = ARsd)
-      } else {
-       TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
-                                           time = 1:length(get(y)[j:x])), trend = trend,
-                         ar = unlist(get(k)),m = length(get(y)[j:x]), ARsd = ARsd)
-      }
+        if (k == "NOAR"){
+          TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+                                             time = 1:length(get(y)[j:x])),
+                            spec = TRUE, trend = trend, ar = unlist(get(k)),
+                            m = length(get(y)[j:x]), ARsd = ARsd)
+        } else {
+         TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+                                             time = 1:length(get(y)[j:x])), trend = trend,
+                           ar = unlist(get(k)),m = length(get(y)[j:x]), ARsd = ARsd)
+        }
         T_lm <- cbind(T_lm, TEMP_lm$best_lm$pval)
-        # 20-year and 10-year gam
-        #TEMP_gam <- fit_gam(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
-        #                                     time = 1:length(get(y)[j:x])))
-        #T_gam <- cbind(T_gam, TEMP_gam$pval)
+
+        #10 and 20 year GLS boot
+        T_gls_boot_P2 <- gls_boot(series = get(y)[j:x])
+        T_gls_boot <- cbind(T_gls_boot, T_gls_boot_P2)
+        
       }
-      colnames(T_1) <- c('p_30_pw','Slope30_pw','p_20_pw',
-                         'Slope20_pw','p_10_pw','Slope10_pw')
+      
+      
+      
+      
+      colnames(T_1) <- c('p_30_pw','p_20_pw','p_10_pw')
       colnames(T_2) <- c('p_30_mk','p_20_mk','p_10_mk')
       colnames(T_lm) <- c('p_30_gls','p_20_gls','p_10_gls')
+      colnames(T_gls_boot) <- c("p_30_gls_boot","p_20_gls_boot","p_10_gls_boot")
+      
       
       if (y=='TEMP1' & k!='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
                                           rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
-                                                cbind(T_1,T_2, T_lm)))
+                                                cbind(T_1,T_2, T_lm,T_gls_boot)))
       } else if (y=='TEMP1' & k=='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
                                                  rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
-                                                       cbind(T_1,T_2, T_lm)))
+                                                       cbind(T_1,T_2, T_lm,T_gls_boot)))
       } else if (y=='LTEMP1') {assign(paste0('LINEARweak_',k,'_RESULTS',sep=""),
                                       rbind(get(paste0('LINEARweak_',k,'_RESULTS',sep="")),
-                                            cbind(T_1,T_2, T_lm)))
+                                            cbind(T_1,T_2, T_lm,T_gls_boot)))
       } else if (y=='LTEMP2') {assign(paste0('LINEARmedium_',k,'_RESULTS',sep=""),
                                       rbind(get(paste0('LINEARmedium_',k,'_RESULTS',sep="")),
-                                            cbind(T_1,T_2, T_lm)))
+                                            cbind(T_1,T_2, T_lm,T_gls_boot)))
       } else if (y=='LTEMP3') {assign(paste0('LINEARstrong_',k,'_RESULTS',sep=""),
                                       rbind(get(paste0('LINEARstrong_',k,'_RESULTS',sep="")),
-                                            cbind(T_1,T_2, T_lm)))}
+                                            cbind(T_1,T_2, T_lm,T_gls_boot)))}
     }
-    #rm(TEMP1,LTEMP1,QTEMP1)
+
   }
 }
 
-#convert Monte Carlo simulation output (p values and slopes)
+#convert Monte Carlo simulation output
 # from wide to long format for plotting
+
 library(data.table)
 results <- c("NOTREND_ARmedium_RESULTS", "NOTREND_NOAR_RESULTS", "NOTREND_ARstrong_RESULTS",
              "LINEARweak_ARmedium_RESULTS", "LINEARweak_ARstrong_RESULTS",
@@ -493,31 +572,11 @@ results <- c("NOTREND_ARmedium_RESULTS", "NOTREND_NOAR_RESULTS", "NOTREND_ARstro
              "LINEARweak_NOAR_RESULTS","LINEARmedium_NOAR_RESULTS","LINEARstrong_NOAR_RESULTS")
 
 
-#wide to long function (Sean Lucey)
-w2l <- function(x, by, by.name = 'Time', value.name = 'Value'){
-  x.new <- copy(x)
-  var.names <- names(x)[which(names(x) != by)]
-  out <- c()
-  setnames(x.new, by, 'by')
-  for(i in 1:length(var.names)){
-    setnames(x.new, var.names[i], 'V1')
-    single.var <- x.new[, list(by, V1)]
-    single.var[, Var := var.names[i]]
-    out <- rbindlist(list(out, single.var))
-    setnames(x.new, 'V1', var.names[i])
-  }
-  setnames(x.new, 'by', by)
-  setnames(out, c('by', 'V1'), c(by.name, value.name))
-}
-
-#filter for p values
 p_result_mat <- list()
 for (i in 1:length(results)){
-  z <- get(results[i])
-  z <- cbind(z[,grepl("p_",colnames(get(results[i]))) == TRUE],seq(1,nrow(z),1))
-  z <- data.table(z)
-  z <- w2l(z, by = "V10", by.name = "replicate")
-  z <- cbind(z,rep(results[i],nrow(z)))
+  z <- as.data.frame(get(results[i]))
+  z <- tidyr::gather(z, Var, Value, p_30_pw:p_10_gls_boot, factor_key = T)
+    z$results <- results[i]
   p_result_mat[[i]] <- z
 }
 
@@ -527,8 +586,8 @@ p_results <-
   as.data.frame() %>%
   tidyr::separate(Var, 
                   c("var", "timeseries length", "method"),
-                  "_") %>%
-  tidyr::separate(V2, 
+                  "_", extra = "merge", fill = "left") %>%
+  tidyr::separate(results, 
                   c("Trend strength", "AR strength", "Results"),
                   "_") %>%
   dplyr::mutate(`Trend strength` = substring(`Trend strength`, first = 7),
@@ -542,13 +601,9 @@ p_results <-
                                        `AR strength`),
                 `AR strength` = paste0(`AR strength`, " AR")) %>%
   dplyr::select(-Results) %>%
-  tidyr::spread(method, Value) %>%
+  #tidyr::spread(method, Value) %>%
   # remove runs that cause NAs in GLS (two runs out of 1000)
-  dplyr::filter(!is.na(gls)) %>%
-  tidyr::gather(method, Value, 
-                -replicate, -var, 
-                -`timeseries length`, -`Trend strength`,
-                -`AR strength`) %>%
+  dplyr::filter(!is.na(method)) %>%
   dplyr::mutate(`Trend strength` = factor(`Trend strength`, 
                                           levels = c("strong trend",
                                                      "medium trend",
@@ -561,7 +616,7 @@ p_results <-
 print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
   write.csv(p_results, file = paste0(data.dir,"power_results","_",Sys.Date(),".csv"))
 } else if (!run){
-  p_results <- read.csv(paste0(data.dir,"power_results","_",date,".csv"))
+  p_results <- read.csv(paste0(data.dir,"/power_results","_",date,".csv"))
 }
 
 
@@ -571,18 +626,14 @@ print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
 ```
 
 ```{r power analysis figures, echo = F, fig.align='center'}
-p_agg <- p_results %>% group_by(timeseries.length, Trend.strength, AR.strength,
-                        method) %>% dplyr::summarise(median = median(Value),
-                                                     mean = mean(Value),
-                                                     sd = sd(Value),
-                                                     n = n(),
-                                                     prop = length(Value[Value < 0.05])/n())
-p_agg$Trend.strength = factor(p_agg$Trend.strength, levels=c('strong trend','medium trend','weak trend','no trend'))
+p_agg <- p_results %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
+                        method) %>% dplyr::summarise(prop = length(Value[Value < 0.05])/n())
+p_agg$Trend.strength = factor(p_agg$`Trend strength`, levels=c('strong trend','medium trend','weak trend','no trend'))
 
-p_agg$AR.strength = factor(p_agg$AR.strength, levels=c('no AR','medium AR','strong AR'))
+p_agg$AR.strength = factor(p_agg$`AR strength`, levels=c('no AR','medium AR','strong AR'))
 
 ggplot(p_agg, aes(color = method, y = prop, 
-                      x = timeseries.length)) +
+                      x = `timeseries length`)) +
   geom_bar(stat = "identity", position = "dodge",
            fill = "grey95", size = 0.75) +
   facet_grid(Trend.strength ~ AR.strength) +
@@ -735,9 +786,13 @@ if (run){
     print(proc.time() - ptm)
 }
 
-coverage_10 <- write.csv(sim_results_10, file = paste0(data.dir,"coverage_10","_",date,".csv"))
-coverage_20 <- write.csv(sim_results_20, file = paste0(data.dir,"coverage_20","_",date,".csv"))
-coverage_30 <- write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_",date,".csv"))
+coverage_10 <- sim_results_10  
+coverage_20 <- sim_results_20  
+coverage_30 <- sim_results_30  
+  
+write.csv(sim_results_10, file = paste0(data.dir,"coverage_10","_",date,".csv"))
+write.csv(sim_results_20, file = paste0(data.dir,"coverage_20","_",date,".csv"))
+write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_",date,".csv"))
   
 } else if (!run){
 
@@ -811,7 +866,7 @@ label <- function(variable,value){
 
 
 summary_func <- function(df, full_proc = T, type){
-  agg <- df %>% group_by(timeseries.length, Trend.strength, AR.strength,
+  agg <- df %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
                               method) %>%  
     dplyr::summarise(median = median(Value),
        mean = mean(Value),
@@ -820,13 +875,13 @@ summary_func <- function(df, full_proc = T, type){
        prop = length(Value[Value < 0.05])/n())
   
   if (full_proc & type == 2){
-    agg <- agg %>% group_by(timeseries.length, method) %>%
-      filter(Trend.strength != 'no trend') %>%
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` != 'no trend') %>%
       dplyr::summarise(mean = mean(prop))
     return(agg)
   } else if (full_proc & type == 1){
-    agg <- agg %>% group_by(timeseries.length, method) %>%
-      filter(Trend.strength == 'no trend') %>%
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` == 'no trend') %>%
     dplyr::summarise(mean = mean(prop))
     return(agg)
   }
@@ -1015,8 +1070,8 @@ ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
 
 ```{r MCCR, echo = F, fig.align='center',fig.width = 8, fig.height= 3.25}
 #Matthew correlation coefficient
-p_resultsm <- p_results %>% mutate(Trend.strength,
-                                   actual = plyr::mapvalues(Trend.strength, from = c("strong trend","medium trend",
+p_resultsm <- p_results %>% mutate(`Trend strength`,
+                                   actual = plyr::mapvalues(`Trend strength`, from = c("strong trend","medium trend",
                                                                                        "weak trend", "no trend"),
                                              to = c(1,1,1,0))) %>%
   mutate(predict = ifelse(Value < 0.05,1,0 ))
@@ -1024,6 +1079,8 @@ p_resultsm <- p_results %>% mutate(Trend.strength,
 mk <- p_resultsm[p_resultsm$method == 'mk',]
 pw <- p_resultsm[p_resultsm$method == 'pw',]
 gls <- p_resultsm[p_resultsm$method == 'gls',]
+gls_boot <- p_resultsm[p_resultsm$method == 'gls_boot',]
+
 
 #plotting MCCR across AR strengths
 df <- p_resultsm
@@ -1052,8 +1109,12 @@ mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mc
                  var = c("no AR","med. AR","strong AR"),
                  Test = "GLS",
                  id = "AR Strength")
+mcc_gls_boot <- data.frame(mcc = c(mccr_ar(gls_boot, "no AR"),mccr_ar(gls_boot, "medium AR"),mccr_ar(gls_boot, "strong AR")),
+                 var = c("no AR","med. AR","strong AR"),
+                 Test = "GLS /w bootstrap",
+                 id = "AR Strength")
 
-mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls)
+mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls, mcc_gls_boot)
 
 ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
   geom_line(aes(color = Test), size = 1.1) +
@@ -1080,8 +1141,12 @@ mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 2
                            var = c(10,20,30),
                       Test = "GLS",
                       id = "Series Length")
+mcc_gls_boot_time <- data.frame(mcc = c(mccr_ar(gls_boot, time = 10),mccr_ar(gls_boot, time = 20),mccr_ar(gls_boot, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS w/ bootstrap",
+                      id = "Series Length")
 
-mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time)
+mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time, mcc_gls_boot_time)
 
 
 time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
