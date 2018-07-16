@@ -385,7 +385,7 @@ $$Y_{t} = Y_{t}^{'} + bt.$$
 set.seed(123)
 run <- T #Run simulations or pull from previous results
 
-nsims = 2 #number of simulations
+nsims = 100 #number of simulations
 nBootSims <- 500 #number of bootstrap samples
 ARsd <- .54^.5 #standard deviation of innovations
 
@@ -450,8 +450,10 @@ LINEARstrong_NOAR_RESULTS <- NULL
 
 #initializing simulations
 for (i in 1:nsims) {
+  print(i)
   #Generating ar(1) simulations
   for (k in c('ARmedium','ARstrong','NOAR')){
+   #  for (k in c('NOAR')){
     # Simulate arima process with sd set to the mean sd
     # of the residuals
     TEMP1 <- arima.sim(get(k), n=x, rand.gen=rnorm, sd = ARsd)
@@ -464,6 +466,8 @@ for (i in 1:nsims) {
     assign(paste0('NOTREND_',k, sep=""),rbind(get(paste0('NOTREND_',k, sep="")), TEMP1))
     
     for (y in c('TEMP1','LTEMP1','LTEMP2','LTEMP3')){
+      
+    #for (y in c('LTEMP3')){
       # Print counter
       
       #Testing 30 year series with prewhitening Mann-Kendall technique
@@ -502,9 +506,10 @@ for (i in 1:nsims) {
       #GLS boot method
       T_gls_boot <- gls_boot(series = get(y))
       
-      for (j in c(20,10)) {
+      for (j in c(11,21)) {
         #Testind 20 & 10 year series with prewhitening Mann-Kendall technique
         TEMP_TEST2 <- zyp.trend.vector(get(y)[j:x],method='yuepilon')
+        print(paste(j,length(get(y)[j:x])))
         TEMP_P2 <- unlist(TEMP_TEST2[6])
         T_1 <- cbind(T_1,TEMP_P2)
         
@@ -514,17 +519,28 @@ for (i in 1:nsims) {
         T_2 <- cbind(T_2,TEMP_P22)
         
         # 20-year and 10-year linear model
-        if (k == "NOAR"){
-          TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+        TEMP_lm <- tryCatch({
+          
+          #Correctly specifies model when no AR error in simulated time series
+          if (k == "NOAR"){
+            TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
                                              time = 1:length(get(y)[j:x])),
                             spec = TRUE, trend = trend, ar = unlist(get(k)),
-                            m = length(get(y)[j:x]), ARsd = ARsd)
-        } else {
-         TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+                            m = length(get(y)[j:x]), ARsd = ARsd)[[1]]$pval
+          } else{
+            TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
                                              time = 1:length(get(y)[j:x])), trend = trend,
-                           ar = unlist(get(k)),m = length(get(y)[j:x]), ARsd = ARsd)
-        }
-        T_lm <- cbind(T_lm, TEMP_lm$best_lm$pval)
+                           ar = unlist(get(k)),m = length(get(y)[j:x]), ARsd = ARsd)[[1]]$pval
+            
+          }
+          
+        }, 
+        error = function(e) {
+          TEMP_lm <- NA
+        })
+        
+        
+        T_lm <- cbind(T_lm, TEMP_lm)
 
         #10 and 20 year GLS boot
         T_gls_boot_P2 <- gls_boot(series = get(y)[j:x])
@@ -532,7 +548,9 @@ for (i in 1:nsims) {
         
       }
       
-      
+
+
+        
       
       
       colnames(T_1) <- c('p_30_pw','p_20_pw','p_10_pw')
@@ -544,6 +562,7 @@ for (i in 1:nsims) {
       if (y=='TEMP1' & k!='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
                                           rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
                                                 cbind(T_1,T_2, T_lm,T_gls_boot)))
+        
       } else if (y=='TEMP1' & k=='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
                                                  rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
                                                        cbind(T_1,T_2, T_lm,T_gls_boot)))
@@ -570,6 +589,8 @@ results <- c("NOTREND_ARmedium_RESULTS", "NOTREND_NOAR_RESULTS", "NOTREND_ARstro
              "LINEARmedium_ARmedium_RESULTS","LINEARmedium_ARstrong_RESULTS",
              "LINEARstrong_ARmedium_RESULTS", "LINEARstrong_ARstrong_RESULTS",
              "LINEARweak_NOAR_RESULTS","LINEARmedium_NOAR_RESULTS","LINEARstrong_NOAR_RESULTS")
+
+#results <- c("LINEARstrong_NOAR_RESULTS")
 
 
 p_result_mat <- list()
@@ -628,15 +649,16 @@ print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
 ```{r power analysis figures, echo = F, fig.align='center'}
 p_agg <- p_results %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
                         method) %>% dplyr::summarise(prop = length(Value[Value < 0.05])/n())
-p_agg$Trend.strength = factor(p_agg$`Trend strength`, levels=c('strong trend','medium trend','weak trend','no trend'))
 
-p_agg$AR.strength = factor(p_agg$`AR strength`, levels=c('no AR','medium AR','strong AR'))
+p_agg$`Trend strength` = factor(p_agg$`Trend strength`, levels=c('strong trend','medium trend','weak trend','no trend'))
+p_agg$`AR strength` = factor(p_agg$`AR strength`, levels=c('no AR','medium AR','strong AR'))
+p_agg$`timeseries length` = factor(p_agg$`timeseries length`, levels=c(10,20,30))
 
 ggplot(p_agg, aes(color = method, y = prop, 
                       x = `timeseries length`)) +
   geom_bar(stat = "identity", position = "dodge",
            fill = "grey95", size = 0.75) +
-  facet_grid(Trend.strength ~ AR.strength) +
+  facet_grid(`Trend strength` ~ `AR strength`) +
   ylab(expression(paste("Power (", N[Rej],"/",N[Tot],")",sep=""))) +
   xlab("Time series length") +
   theme_bw()
