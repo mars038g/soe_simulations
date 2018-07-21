@@ -1,4 +1,4 @@
----
+--
 title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
@@ -255,8 +255,13 @@ gls_boot <- function(series){
     # i think you call y = series and x = time. You'll need to change that
     # i also simulate with alpha (the intercept) = 0, i dont think you do. In that case you will remove the "-1" 
     # from the calls to gls
-    glsObjBootNull <- nlme::gls(y ~ 1,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
-    glsObjBootAlt <- nlme::gls(y ~ x,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+    if (k != "NOAR"){
+      glsObjBootNull <- nlme::gls(y ~ 1,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+      glsObjBootAlt <- nlme::gls(y ~ x,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+    } else if (k == "NOAR") {
+      glsObjBootNull <- nlme::gls(y ~ 1,data=bootdata, method="ML")
+      glsObjBootAlt <- nlme::gls(y ~ x,data=bootdata, method="ML")
+    }
     
     # calculate and store the likelihood ratio statistic for each bootstrapped sample
     LRstat[iboot] <- -2*(glsObjBootNull$logLik- glsObjBootAlt$logLik)
@@ -385,7 +390,7 @@ $$Y_{t} = Y_{t}^{'} + bt.$$
 set.seed(123)
 run <- T #Run simulations or pull from previous results
 
-nsims = 100 #number of simulations
+nsims = 500 #number of simulations
 nBootSims <- 500 #number of bootstrap samples
 ARsd <- .54^.5 #standard deviation of innovations
 
@@ -645,6 +650,27 @@ print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
 
 
 ```
+
+###Effects of series length, autocorrelation, and trend strength on test power
+
+As has been documented elsewhere (Yue et al. 2002), we show in Figure 1 that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detetcing trend in series with N < 20. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. Type 1 error decreased to < 0.1 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. When $\beta$ was greater than 0.04 under no autocorrelation and N$\geq$20, the GLS test showed the highest rejection rate compared to other tests. Although slightly inflated when N=10, all tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios.
+
+Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic. Identifying this problem led to the development of the MK-PW and other stepwise approaches that sought to address issues introduced by the MK-test when assumptions of independence are violated (Wang et al. 2000, Yue et al. 2002). Our work agrees with these authors and others (von Storch 1995) showing that under no simulated trend, introducing autocorrelation leads to inflated rejection rates in the MK test. Figure 1 shows that under no trend and medium or strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with autocorrelation and series length. All other tests showed decreases in rejection rates under both medium and strong autocorrelation scenarios with increasing series length.
+
+The GLS-B test was by far the strongest test under the no trend and strong autocorrelation scenario. When N = 30, the rejection rate of the GLS-B test was 0.046. At N = 20, the rejection rate for this test was slightly inflated to 0.078. The next best test was the MK-PW approach. The rejection rate for this test when N = 30 was close to five times the rate of the GLS-B under the same scenario at 0.222. The GLS test showed the worst performance of tests accounting for $AR(1)$ error structure, although rejection rates followed the trend of decreasing with series length. When N = 30, the GLS test rejection rate was 0.262. Patterns in rejection rate under weak trend ($\beta = 0.004$) and strong autocorrelation were similar to those seen in the no trend and strong autocorrelation scenario (Figure 2).
+
+```{r histograms for p}
+#Weak vs no trend
+wk_nt <- p_results %>% filter(`Trend strength` == 'weak trend' | `Trend strength` == "no trend")
+ggplot(wk_nt, aes(color = method, y = Value, 
+                      x = `timeseries length`)) +
+  geom_boxplot() +
+  facet_grid(method ~ `AR strength`+`Trend strength`) 
+
+```
+
+
+
 
 ```{r power analysis figures, echo = F, fig.align='center'}
 p_agg <- p_results %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
@@ -926,49 +952,49 @@ conf_mat <- function(df, test, ar = NULL){
     ar <- "AR"
   }
   #True positives
-  true_pos_frac <- nrow(df[df$Trend.strength != "no trend" &
+  true_pos_frac <- nrow(df[df$`Trend strength` != "no trend" &
                           df$Value <= 0.05 &
                           df$method == test &
-                            grepl(ar,df$AR.strength),])
-  true_pos_tot <- nrow(df[df$Trend.strength != "no trend" &
+                            grepl(ar,df$`AR strength`),])
+  true_pos_tot <- nrow(df[df$`Trend strength` != "no trend" &
                             df$method == test&
-                            grepl(ar,df$AR.strength),])
+                            grepl(ar,df$`AR strength`),])
   
   true_pos_freq <- true_pos_frac/true_pos_tot 
   
   #False positives
  
-  false_pos_frac <- nrow(df[df$Trend.strength == "no trend" &
+  false_pos_frac <- nrow(df[df$`Trend strength` == "no trend" &
                         df$Value <= 0.05 &
                         df$method == test&
-                          grepl(ar,df$AR.strength),])
-  false_pos_tot <- nrow(df[df$Trend.strength == "no trend" &
+                          grepl(ar,df$`AR strength`),])
+  false_pos_tot <- nrow(df[df$`Trend strength` == "no trend" &
                              df$method == test&
-                             grepl(ar,df$AR.strength),])
+                             grepl(ar,df$`AR strength`),])
   
   false_pos_freq <- false_pos_frac/false_pos_tot
   
   #False negatives
 
-  false_neg_frac <- nrow(df[df$Trend.strength != "no trend" &
+  false_neg_frac <- nrow(df[df$`Trend strength` != "no trend" &
                          df$Value >= 0.05 &
                          df$method == test&
-                           grepl(ar,df$AR.strength),])
-  false_neg_tot <- nrow(df[df$Trend.strength != "no trend "&
+                           grepl(ar,df$`AR strength`),])
+  false_neg_tot <- nrow(df[df$`Trend strength` != "no trend "&
                              df$method == test&
-                             grepl(ar,df$AR.strength),])
+                             grepl(ar,df$`AR strength`),])
   
   false_neg_freq <- false_neg_frac/false_neg_tot
   
   #true
   
-  true_neg_frac <- nrow(df[df$Trend.strength == "no trend" &
+  true_neg_frac <- nrow(df[df$`Trend strength` == "no trend" &
                          df$Value >= 0.05 &
                          df$method == test&
-                           grepl(ar,df$AR.strength),])
-  true_neg_tot <- nrow(df[df$Trend.strength == "no trend" &
+                           grepl(ar,df$`AR strength`),])
+  true_neg_tot <- nrow(df[df$`Trend strength` == "no trend" &
                             df$method == test&
-                            grepl(ar,df$AR.strength),])
+                            grepl(ar,df$`AR strength`),])
   
   true_neg_freq <- true_neg_frac/true_neg_tot
 
@@ -984,7 +1010,8 @@ conf_mat <- function(df, test, ar = NULL){
 mk <- cbind(conf_mat(p_results,test = "mk"), test = rep('mk',4))
 pw <- cbind(conf_mat(p_results, test = "pw"), test = rep('pw',4))
 gls <- cbind(conf_mat(p_results, test = "gls"), test = rep('gls',4))
-fin <- rbind(mk, pw, gls)
+gls_boot <- cbind(conf_mat(p_results, test = "gls_boot"), test = rep('gls_boot',4))
+fin <- rbind(mk, pw, gls, gls_boot)
 fin$group <- factor(paste(fin$x,fin$y))
 
 
@@ -998,7 +1025,8 @@ fin_dif <- fin %>% group_by(group) %>%
 facet_names <- list(
   'mk'="Mann-Kendall",
   'pw'="MK-TFPW",
-  'gls'="GLS"
+  'gls'="GLS",
+  'gls_boot' = "GLS bootstrap"
 )
 
 pal <- colorRampPalette(c("white","darkorange")) #color palette
