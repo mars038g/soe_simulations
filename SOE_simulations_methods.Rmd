@@ -3,10 +3,9 @@ title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
-  pdf_document: default
   html_document: 
     df_print: paged
-    css: manuscript_style.css
+  pdf_document: default
 bibliography: SOE simulations.bib
 indent: true
 header-includes:
