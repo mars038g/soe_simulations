@@ -1,11 +1,19 @@
---
+---
 title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
+  pdf_document: default
   html_document: 
     df_print: paged
-  pdf_document: default
+    css: manuscript_style.css
+bibliography: SOE simulations.bib
+indent: true
+header-includes:
+   - \usepackage{setspace}
+   - \doublespacing
+   - \usepackage{float}
+   - \usepackage[bottom]{footmisc}
 ---
 
 ```{r setup, include=FALSE}
@@ -49,7 +57,7 @@ installLoadPackages(packages)
 
 ```
 
-###Function
+<!--Function-->
 ```{r functions, echo = F}
 fit_lm <- function(dat, ar, m, ARsd, trend, spec = FALSE){
   success <- FALSE
@@ -294,6 +302,34 @@ w2l <- function(x, by, by.name = 'Time', value.name = 'Value'){
 
 
 ```
+```{r constants for simulations, echo = F}
+set.seed(123)
+run <- F #Run simulations or pull from previous results
+
+nsims = 500 #number of simulations
+nBootSims <- 500 #number of bootstrap samples
+ARsd <- .54^.5 #standard deviation of innovations
+
+NOAR <- list()
+medAR <- 0.433
+strongAR <- 0.8
+
+date <- "2018-07-21"
+x <- 30
+```
+##Abstract
+
+##Introduction
+
+  The development and analysis of indicators plays a key strategic role in implementing the Ecosystem Approach for a host of science, management, and intergovernmental organizations [e.g. @NOAA2006; @ICES2013; @SecretariatoftheConventiononBiologicalDiversity2004; @Pices2010; @Garcia2003; @Levin2009a]. At least partially in support of this, substantial effort has been invested in assessing indicator status and trends for the purpose of ecosystem reporting, in all of its guises [e.g. @Garfield2016; @NEFSC2018; @NEFSC2018a; @Blanchard2010; O'Brien 2017; @Butchart2010]. 
+
+  Ecosystem-level indicators often vary greatly with respect to the length of the series under investigation. The ultimate goal of providing integrated advice often leads analysts to truncate longer datasets; generating a consistent series length across indicators for comparison purposes [e.g. @Blanchard2010; @Shin2010; @Shannon2010; @Canales2015]. Further reinforcing this approach is the fact that managers tend to focus on short-term issues [@SecretariatoftheConventiononBiologicalDiversity2004; @Wagner2013], which ultimately necessitates the assessment of trajectories at relatively short time scales.  
+
+  These issues can lead to the use of short time series for the purpose of ecosystem reporting; i.e. less than 20 data points per indicator [@Blanchard2010; @Shin2010; @Shannon2010; @Canales2015; @Mackas2001; @Nicholson2004]. Statistical trend analysis of indicator data is the gold standard for managers, stakeholders, and analysts. However, in reality trend analysis in this context can be extremely difficult. Evidence indicates that the statistical power to identify trends using short time series may be limited in general [@Nicholson2004; @Wagner2013]. The hydrological and climatological literature shows that autocorrelation in time series can falsely inflate trend detection rates when models are incorrectly specified assuming the independence of error terms [@Kulkarni1995; @VonStorch1999a; @Zhang2000; @Wang2001a; @Yue2002a; @Bayazit2015].The magnitude of assigned trends can also be inflated by the presence of autocorrelation, and both of these problems are amplified by short time series [@Kulkarni1995; @Yue2002a]. Despite this, there has been no systematic investigation for the performance of models in detecting trends across the full breadth of indicators utilized in ecosystem reporting.
+
+  In this manuscript we abstract away from issues surrounding the identification and vetting of appropriate indicators, but note that this in itself can be a challenging undertaking for which @Bundy2017 present a survey of the literature. We focus, instead, on the ability to statistically identify trends for the broad array of indicators used in marine ecosystem reporting; ranging from large-scale climatological and oceanographic drivers through the benefits derived by human society. We use Monte Carlo simulations to assess the performance of the most commonly applied statistical models under a range of time series lengths, trend strengths, and autocorrelation regimes. The simulations are parameterized using the properties of indicators currently presented in the Mid-Atlantic and New England State of the Ecosystem Reports, which are annual ecosystem status reports tailored for the U.S. Mid-Atlantic and New England Fishery Management Councils respectively [@NEFSC2018; @NEFSC2018a]. 
+  
+  Results indicate that correctly identifying trends is problematic using less than 30 data points, with both Type I and Type II error common. Even under the strongest signal-noise ratio (i.e. strong trends and no autocorrelation) models perform poorly with only ten data points. The simulations highlight problems associated with standardizing approaches across indicators, and suggest that further thought is warranted on status and trend analysis in the context of ecosystem reporting.
 
 ##Methods
 ####Simulations
@@ -385,24 +421,16 @@ $$Y_{t} = Y_{t}^{'} + bt.$$
 
 
 
+
+
+
+
+
+
+
+
+
 ##Results
-```{r constants for simulations, echo = F}
-set.seed(123)
-run <- T #Run simulations or pull from previous results
-
-nsims = 500 #number of simulations
-nBootSims <- 500 #number of bootstrap samples
-ARsd <- .54^.5 #standard deviation of innovations
-
-NOAR <- list()
-medAR <- 0.433
-strongAR <- 0.8
-
-date <- "2018-06-29"
-x <- 30
-```
-
-
 ####Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
 ```{r assessing model power, echo = F}
 if (run){
@@ -642,7 +670,10 @@ p_results <-
 print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
   write.csv(p_results, file = paste0(data.dir,"power_results","_",Sys.Date(),".csv"))
 } else if (!run){
-  p_results <- read.csv(paste0(data.dir,"/power_results","_",date,".csv"))
+  p_results <- read.csv(paste0(data.dir,"power_results","_",date,".csv"))
+  names(p_results)[3] <- "timeseries length"
+  names(p_results)[6] <- "Trend strength"
+  names(p_results)[7] <- "AR strength"
 }
 
 
@@ -651,28 +682,9 @@ print( paste0(data.dir,"/power_results","_",Sys.Date(),".csv"))
 
 ```
 
-###Effects of series length, autocorrelation, and trend strength on test power
-
-As has been documented elsewhere (Yue et al. 2002), we show in Figure 1 that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detetcing trend in series with N < 20. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. Type 1 error decreased to < 0.1 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. When $\beta$ was greater than 0.04 under no autocorrelation and N$\geq$20, the GLS test showed the highest rejection rate compared to other tests. Although slightly inflated when N=10, all tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios.
-
-Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic. Identifying this problem led to the development of the MK-PW and other stepwise approaches that sought to address issues introduced by the MK-test when assumptions of independence are violated (Wang et al. 2000, Yue et al. 2002). Our work agrees with these authors and others (von Storch 1995) showing that under no simulated trend, introducing autocorrelation leads to inflated rejection rates in the MK test. Figure 1 shows that under no trend and medium or strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with autocorrelation and series length. All other tests showed decreases in rejection rates under both medium and strong autocorrelation scenarios with increasing series length.
-
-The GLS-B test was by far the strongest test under the no trend and strong autocorrelation scenario. When N = 30, the rejection rate of the GLS-B test was 0.046. At N = 20, the rejection rate for this test was slightly inflated to 0.078. The next best test was the MK-PW approach. The rejection rate for this test when N = 30 was close to five times the rate of the GLS-B under the same scenario at 0.222. The GLS test showed the worst performance of tests accounting for $AR(1)$ error structure, although rejection rates followed the trend of decreasing with series length. When N = 30, the GLS test rejection rate was 0.262. Patterns in rejection rate under weak trend ($\beta = 0.004$) and strong autocorrelation were similar to those seen in the no trend and strong autocorrelation scenario (Figure 2).
-
-```{r histograms for p}
-#Weak vs no trend
-wk_nt <- p_results %>% filter(`Trend strength` == 'weak trend' | `Trend strength` == "no trend")
-ggplot(wk_nt, aes(color = method, y = Value, 
-                      x = `timeseries length`)) +
-  geom_boxplot() +
-  facet_grid(method ~ `AR strength`+`Trend strength`) 
-
-```
-
-
-
-
-```{r power analysis figures, echo = F, fig.align='center'}
+  Simulation results show that no test for trend exceeded in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere [@Yue2002a; @Yue2002b], we show in Figure \ref{Fig1} that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detecting trends in series with N < 20. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. Type 1 error decreased to < 0.1 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. When $\beta$ was greater than 0.04 under no autocorrelation and $N \geq 20$, the GLS test showed the highest rejection rate compared to other tests. Although slightly inflated when N=10, all tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios.
+  
+```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the ratio of number of rejections (\\textit{p}<0.05) to number of total simulations. Subplots are representative of different autocorrelation and trend scenarios, with time series length increasing along the x axis. Colored bars show results from different tests for trend.\\label{Fig1}"}
 p_agg <- p_results %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
                         method) %>% dplyr::summarise(prop = length(Value[Value < 0.05])/n())
 
@@ -691,10 +703,278 @@ ggplot(p_agg, aes(color = method, y = prop,
 
 ```
 
+  Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@Yue2002a]. Identifying this problem led to the development of the MK-PW and other stepwise approaches that sought to address issues introduced by the MK-test when assumptions of independence are violated (Wang et al. 2000, Yue et al. 2002). Our work agrees with these authors and others (von Storch 1995) showing that under no simulated trend, introducing autocorrelation leads to inflated rejection rates in the MK test. Figure 1 shows that under no trend and strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates under both medium and strong autocorrelation scenarios with increasing series length.
 
-####GLS decile coverage simulations
+  The GLS-B test was by far the strongest test under the no trend and strong autocorrelation scenario. When N = 30, the rejection rate of the GLS-B test was 0.046. At N = 20, the rejection rate for this test was slightly inflated to 0.078. Under all autocorrelation and trend strength parameters when N=30, the GLS-B test incorrectly rejected the null in only 5.5\% of cases; correctly accepting the null in 94.8\% of simulations (Figure \ref{Fig3}).  The next best test was the MK-PW approach. The rejection rate for this test when N = 30 was close to five times the rate of the GLS-B under the same scenario at 0.222. The GLS test showed the worst performance of tests accounting for $AR(1)$ error structure, although rejection rates followed the trend of decreasing with series length. When N = 30, the GLS test rejection rate was 0.262. Patterns in rejection rate under weak trend ($\beta = 0.004$) and strong autocorrelation were similar to those seen in the no trend and strong autocorrelation scenario (Figure \ref{Fig2}). 
 
-```{r decile coverage simulations, echo = F}
+```{r histograms for p, echo = F, fig.align='center', fig.cap = "Boxplots comparing resulting \\textit{p} values from tests for trend under no trend and weak trend scenarios.\\label{Fig2}"}
+#Weak vs no trend
+wk_nt <- p_results %>% filter(`Trend strength` == 'weak trend' | `Trend strength` == "no trend") %>% select(-c(X))
+wk_nt$`timeseries length` <- as.factor(wk_nt$`timeseries length`)
+
+ggplot(wk_nt, aes(color = method, y = Value, 
+                      x = `timeseries length`)) +
+  geom_boxplot(position = "dodge") +
+  facet_grid(method ~ `AR strength` + `Trend strength`) +
+  theme_bw()
+
+```
+
+  Under strong autocorrelation and strong trend, there were increasing rejection rates for all tests with increasing series length, except for the GLS, which had similar rejection rates in both N = 10 and N = 30 simulations. When $\beta \leq 0.8$, the pattern of increasing rejection rate with series length reverses, and for all tests except the Mann Kendall, rejection rates tend to decrease with series length. This result shows that tests developed to account for autocorrelation are not effective in detecting trend when autocorrelation is high unless the sample size is large and trend is strong. However, even with strong trend, power of these tests is limited by the presence of strong autocorrelation. As the GLS-B test was most effective in reducing the prevalence of false positives in the case of no trend and strong autocorrelation, it is the weakest in detecting a strong trend in the presence of high autocorrelation. When N = 30 with strong autocorrelation and strong trend, the GLS-B rejected the null hypothesis in less than half of the simulations ($N_{rej}/N_{Tot} = 0.440$).
+
+
+```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS-B test falsely predicted a trend when there was none in 5.5\\% of cases (white), whereas this was true in more than 23\\% of Mann-Kendall simulations.\\label{Fig3}' }
+
+label <- function(variable,value){
+  return(facet_names[value])
+}
+
+
+summary_func <- function(df, full_proc = T, type){
+  agg <- df %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
+                              method) %>%  
+    filter(`timeseries length` != 10) %>%
+    dplyr::summarise(median = median(Value),
+       mean = mean(Value),
+       sd = sd(Value),
+       n = n(),
+       prop = length(Value[Value < 0.05])/n()) 
+  
+  if (full_proc & type == 2){
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` != 'no trend') %>%
+      dplyr::summarise(mean = mean(prop))
+    return(agg)
+  } else if (full_proc & type == 1){
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` == 'no trend') %>%
+    dplyr::summarise(mean = mean(prop))
+    return(agg)
+  }
+    return(agg)
+  }
+ 
+
+false_pos_mat <- summary_func(p_results, type = 1)
+false_rej_mat <- summary_func(p_results, type = 2)
+
+#--------Confusion matrices - One per test----------#
+
+#We want the percentage of true positives, false positives, true negatives, and false negatives
+
+conf_mat <- function(df, test, ar = NULL){
+  df <- df %>% filter(`timeseries length` == 30)
+  if (!is.null(ar)){
+    ar <- ar
+  } else{
+    ar <- "AR"
+  }
+  #True positives
+  true_pos_frac <- nrow(df[df$`Trend strength` != "no trend" &
+                          df$Value <= 0.05 &
+                          df$method == test &
+                            grepl(ar,df$`AR strength`),])
+  true_pos_tot <- nrow(df[df$`Trend strength` != "no trend" &
+                            df$method == test&
+                            grepl(ar,df$`AR strength`),])
+  
+  true_pos_freq <- true_pos_frac/true_pos_tot 
+  
+  #False positives
+ 
+  false_pos_frac <- nrow(df[df$`Trend strength` == "no trend" &
+                        df$Value <= 0.05 &
+                        df$method == test&
+                          grepl(ar,df$`AR strength`),])
+  false_pos_tot <- nrow(df[df$`Trend strength` == "no trend" &
+                             df$method == test&
+                             grepl(ar,df$`AR strength`),])
+  
+  false_pos_freq <- false_pos_frac/false_pos_tot
+  
+  #False negatives
+
+  false_neg_frac <- nrow(df[df$`Trend strength` != "no trend" &
+                         df$Value >= 0.05 &
+                         df$method == test&
+                           grepl(ar,df$`AR strength`),])
+  false_neg_tot <- nrow(df[df$`Trend strength` != "no trend "&
+                             df$method == test&
+                             grepl(ar,df$`AR strength`),])
+  
+  false_neg_freq <- false_neg_frac/false_neg_tot
+  
+  #true
+  
+  true_neg_frac <- nrow(df[df$`Trend strength` == "no trend" &
+                         df$Value >= 0.05 &
+                         df$method == test&
+                           grepl(ar,df$`AR strength`),])
+  true_neg_tot <- nrow(df[df$`Trend strength` == "no trend" &
+                            df$method == test&
+                            grepl(ar,df$`AR strength`),])
+  
+  true_neg_freq <- true_neg_frac/true_neg_tot
+
+  
+  conf_mat <- data.frame(x = c("actual no","actual yes","actual no","actual yes"),
+                         y = c('predicted no','predicted yes','predicted yes','predicted no'),
+                         val = c(round(true_neg_freq,3), round(true_pos_freq,3),
+                                 round(false_pos_freq,3),round(false_neg_freq,3)))
+  
+  return(conf_mat)
+}
+
+mk <- cbind(conf_mat(p_results,test = "mk"), test = rep('mk',4))
+pw <- cbind(conf_mat(p_results, test = "pw"), test = rep('pw',4))
+gls <- cbind(conf_mat(p_results, test = "gls"), test = rep('gls',4))
+gls_boot <- cbind(conf_mat(p_results, test = "gls_boot"), test = rep('gls_boot',4))
+fin <- rbind(mk, pw, gls, gls_boot)
+fin$group <- factor(paste(fin$x,fin$y))
+
+
+#Make matrices for white = good and orange = bad
+fin_dif <- fin %>% group_by(group) %>%
+  mutate(val, best_dif = ifelse(group == "actual no predicted no"|
+                                  group == "actual yes predicted yes", (abs(max(val) - val)), #best_dif is for assigning colors
+                                (abs(min(val) - val)))) 
+
+#For custom facet titles
+facet_names <- list(
+  'mk'="Mann-Kendall",
+  'pw'="MK-TFPW",
+  'gls'="GLS",
+  'gls_boot' = "GLS-B"
+)
+
+pal <- colorRampPalette(c("white","darkred")) #color palette
+
+#plot
+ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
+  facet_grid(. ~ test, labeller = label)+
+  geom_tile(aes(size = 1),color = "grey", size = 1)  +
+  scale_fill_gradientn(colors = pal(10))+
+  geom_text(aes(x = x, y = y, label = round(val,3), size = 1),size = 4) +
+  theme(legend.position = "none",
+        axis.line = element_blank(),
+        axis.title=element_blank(),
+        axis.text.y = element_text(margin = margin(t = 0, r = -6,
+                                                   b = 0, l = 0),
+                                   size = 8),
+        axis.text.x = element_text(margin = margin(t = -3, r = 0,
+                                                   b = 150, l = 0),
+                                   size = 8),
+        axis.ticks.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        plot.title = element_text(hjust = -0.1),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+```
+
+```{r MCCR, echo = F, fig.align='center',fig.width = 8, fig.height= 3.25, fig.cap="The effect of autocorrelation and series length on Matthews Correlation Coefficient; a "}
+#Matthew correlation coefficient
+p_resultsm <- p_results %>% mutate(`Trend strength`,
+                                   actual = plyr::mapvalues(`Trend strength`, from = c("strong trend","medium trend",
+                                                                                       "weak trend", "no trend"),
+                                             to = c(1,1,1,0))) %>%
+  mutate(predict = ifelse(Value < 0.05,1,0 )) %>% filter(!is.na(Value))
+
+mk <- p_resultsm[p_resultsm$method == 'mk',]
+pw <- p_resultsm[p_resultsm$method == 'pw',]
+gls <- p_resultsm[p_resultsm$method == 'gls',]
+gls_boot <- p_resultsm[p_resultsm$method == 'gls_boot',]
+
+
+#plotting MCCR across AR strengths
+df <- p_resultsm
+mccr_ar <- function(df,ar,time = NULL){
+  if(!is.null(time)){
+    z <- df[df$`timeseries length` == time,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr)) 
+  } else {
+    z <- df[df$`AR strength` == ar,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr))  
+  }
+ 
+}
+
+mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
+                var = c("no AR","med. AR AR","strong AR"),
+                Test = "Mann-Kendall",
+                id = "AR Strength")
+mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
+                var = c("no AR","med. AR","strong AR"),
+                Test = "MK-TFPW",
+                id = "AR Strength")
+mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
+                 var = c("no AR","med. AR","strong AR"),
+                 Test = "GLS",
+                 id = "AR Strength")
+mcc_gls_boot <- data.frame(mcc = c(mccr_ar(gls_boot, "no AR"),mccr_ar(gls_boot, "medium AR"),mccr_ar(gls_boot, "strong AR")),
+                 var = c("no AR","med. AR","strong AR"),
+                 Test = "GLS-B",
+                 id = "AR Strength")
+
+mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls, mcc_gls_boot)
+
+ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c("no AR","med. AR","strong AR"))+
+  labs(x = "Autocorrelation strength",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=11,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain"),
+        legend.position = "none")
+
+#MCCR across time series lengths
+
+mcc_mk_time <- data.frame(mcc = c(mccr_ar(mk, time = 10),mccr_ar(mk, time = 20),mccr_ar(mk, time = 30)),
+                     var = c(10,20,30),
+                     Test = "Mann-Kendall",
+                     id = "Series Length")
+mcc_pw_time <- data.frame(mcc = c(mccr_ar(pw, time = 10),mccr_ar(pw, time = 20),mccr_ar(pw, time = 30)),
+                          var = c(10,20,30),
+                     Test = "MK-TFPW",
+                     id = "Series Length")
+mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 20),mccr_ar(gls, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS",
+                      id = "Series Length")
+mcc_gls_boot_time <- data.frame(mcc = c(mccr_ar(gls_boot, time = 10),mccr_ar(gls_boot, time = 20),mccr_ar(gls_boot, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS-B",
+                      id = "Series Length")
+
+mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time, mcc_gls_boot_time)
+
+
+time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c(10,20,30))+
+  labs(x = "Series length",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain")) +
+  xlim(5,35)
+
+plot_grid(ar, time, align = "h", rel_widths = c(1, 1.51), labels = c("A","B"),
+          label_x = c(0.225,0.15),label_fontface = 'plain')
+```
+
+##Discussion
+
+
+
+
+```{r decile coverage simulations, echo = F, eval = F}
 
 #placeholders for results
 gls.ts.NOAR.notrend <- NULL
@@ -852,7 +1132,7 @@ write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_",date,".csv"))
 
 ```
 
-```{r decile coverage plots, echo = F, fig.align='center'}
+```{r decile coverage plots, echo = F, fig.align='center', eval = F}
 
 #---------------------------Process data--------------------------#
 sim_30 <- tidyr::gather(coverage_30, var, value, gls.NOAR.ltrendweak:gls.strongAR.notrend, factor_key=TRUE)
@@ -905,312 +1185,6 @@ ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
 
 ```
 
-####Confusion matrices and Matthew's correlation coefficient
-```{r confusion matrices, echo = F, fig.align='center'}
-
-label <- function(variable,value){
-  return(facet_names[value])
-}
 
 
-summary_func <- function(df, full_proc = T, type){
-  agg <- df %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
-                              method) %>%  
-    dplyr::summarise(median = median(Value),
-       mean = mean(Value),
-       sd = sd(Value),
-       n = n(),
-       prop = length(Value[Value < 0.05])/n())
-  
-  if (full_proc & type == 2){
-    agg <- agg %>% group_by(`timeseries length`, method) %>%
-      filter(`Trend strength` != 'no trend') %>%
-      dplyr::summarise(mean = mean(prop))
-    return(agg)
-  } else if (full_proc & type == 1){
-    agg <- agg %>% group_by(`timeseries length`, method) %>%
-      filter(`Trend strength` == 'no trend') %>%
-    dplyr::summarise(mean = mean(prop))
-    return(agg)
-  }
-    return(agg)
-  }
- 
-
-false_pos_mat <- summary_func(p_results, type = 1)
-false_rej_mat <- summary_func(p_results, type = 2)
-
-#--------Confusion matrices - One per test----------#
-
-#We want the percentage of true positives, false positives, true negatives, and false negatives
-
-conf_mat <- function(df, test, ar = NULL){
-  
-  if (!is.null(ar)){
-    ar <- ar
-  } else{
-    ar <- "AR"
-  }
-  #True positives
-  true_pos_frac <- nrow(df[df$`Trend strength` != "no trend" &
-                          df$Value <= 0.05 &
-                          df$method == test &
-                            grepl(ar,df$`AR strength`),])
-  true_pos_tot <- nrow(df[df$`Trend strength` != "no trend" &
-                            df$method == test&
-                            grepl(ar,df$`AR strength`),])
-  
-  true_pos_freq <- true_pos_frac/true_pos_tot 
-  
-  #False positives
- 
-  false_pos_frac <- nrow(df[df$`Trend strength` == "no trend" &
-                        df$Value <= 0.05 &
-                        df$method == test&
-                          grepl(ar,df$`AR strength`),])
-  false_pos_tot <- nrow(df[df$`Trend strength` == "no trend" &
-                             df$method == test&
-                             grepl(ar,df$`AR strength`),])
-  
-  false_pos_freq <- false_pos_frac/false_pos_tot
-  
-  #False negatives
-
-  false_neg_frac <- nrow(df[df$`Trend strength` != "no trend" &
-                         df$Value >= 0.05 &
-                         df$method == test&
-                           grepl(ar,df$`AR strength`),])
-  false_neg_tot <- nrow(df[df$`Trend strength` != "no trend "&
-                             df$method == test&
-                             grepl(ar,df$`AR strength`),])
-  
-  false_neg_freq <- false_neg_frac/false_neg_tot
-  
-  #true
-  
-  true_neg_frac <- nrow(df[df$`Trend strength` == "no trend" &
-                         df$Value >= 0.05 &
-                         df$method == test&
-                           grepl(ar,df$`AR strength`),])
-  true_neg_tot <- nrow(df[df$`Trend strength` == "no trend" &
-                            df$method == test&
-                            grepl(ar,df$`AR strength`),])
-  
-  true_neg_freq <- true_neg_frac/true_neg_tot
-
-  
-  conf_mat <- data.frame(x = c("actual no","actual yes","actual no","actual yes"),
-                         y = c('predicted no','predicted yes','predicted yes','predicted no'),
-                         val = c(round(true_neg_freq,3), round(true_pos_freq,3),
-                                 round(false_pos_freq,3),round(false_neg_freq,3)))
-  
-  return(conf_mat)
-}
-
-mk <- cbind(conf_mat(p_results,test = "mk"), test = rep('mk',4))
-pw <- cbind(conf_mat(p_results, test = "pw"), test = rep('pw',4))
-gls <- cbind(conf_mat(p_results, test = "gls"), test = rep('gls',4))
-gls_boot <- cbind(conf_mat(p_results, test = "gls_boot"), test = rep('gls_boot',4))
-fin <- rbind(mk, pw, gls, gls_boot)
-fin$group <- factor(paste(fin$x,fin$y))
-
-
-#Make matrices for white = good and orange = bad
-fin_dif <- fin %>% group_by(group) %>%
-  mutate(val, best_dif = ifelse(group == "actual no predicted no"|
-                                  group == "actual yes predicted yes", (abs(max(val) - val)), #best_dif is for assigning colors
-                                (abs(min(val) - val)))) 
-
-#For custom facet titles
-facet_names <- list(
-  'mk'="Mann-Kendall",
-  'pw'="MK-TFPW",
-  'gls'="GLS",
-  'gls_boot' = "GLS bootstrap"
-)
-
-pal <- colorRampPalette(c("white","darkorange")) #color palette
-
-#plot
-ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
-  facet_grid(. ~ test, labeller = label)+
-  geom_tile(aes(size = 1),color = "grey", size = 1)  +
-  scale_fill_gradientn(colors = pal(10))+
-  geom_text(aes(x = x, y = y, label = round(val,3), size = 1),size = 4) +
-  theme(legend.position = "none",
-        axis.line = element_blank(),
-        axis.text=element_text(size=12),
-        axis.title=element_blank(),
-        axis.text.y = element_text(margin = margin(t = 0, r = -6,
-                                                   b = 0, l = 0),
-                                   size = 10),
-        axis.text.x = element_text(margin = margin(t = -3, r = 0,
-                                                   b = 150, l = 0),
-                                   size = 10),
-        axis.ticks.y=element_blank(),
-        axis.ticks.x=element_blank(),
-        plot.title = element_text(hjust = -0.1),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
-
-# #This piece uses color to show divergence of cells from the mean of that cell class across models
-# fin_dif <- fin %>% group_by(group) %>%
-#   mutate(mean_dif = mean(val) - val)
-# 
-# fin_dif$group <- factor(fin_dif$group)
-# 
-# ggplot(data = fin_dif, aes(x,y, fill = mean_dif)) +
-#   facet_grid(. ~ test, labeller = label)+
-#   geom_tile(aes(size = 0.25))  +
-#   scale_fill_gradient2(low = "darkorange", mid = "white", high = "purple")+
-#   geom_text(aes(x = x, y = y, label = round(val,3), size = 1.4)) +
-#   theme(legend.position = "none",
-#         axis.line = element_blank(),
-#         axis.text=element_text(size=12),
-#         axis.title=element_blank(),
-#         axis.text.y = element_text(margin = margin(t = 0, r = -10,
-#                                                    b = 0, l = 0),
-#                                    size = 15),
-#         axis.text.x = element_text(margin = margin(t = -10, r = 0,
-#                                                    b = 0, l = 0),
-#                                    size = 15),
-#         axis.ticks.y=element_blank(),
-#         axis.ticks.x=element_blank(),
-#         plot.title = element_text(hjust = -0.1))
-# 
-# 
-# #Do the same for varying autocorrelation strengths - first strong AR class
-# 
-# mk <- cbind(conf_mat(p_results,test = "mk", ar = "strong"), test = rep('mk',4))
-# pw <- cbind(conf_mat(p_results, test = "pw", ar = "strong"), test = rep('pw',4))
-# gls <- cbind(conf_mat(p_results, test = "gls", ar = "strong"), test = rep('gls',4))
-# 
-# 
-# ar_str <- rbind(mk, pw, gls)
-# ar_str$group <- paste(ar_str$x,ar_str$y)
-# 
-# ar_str_dif <- ar_str %>% group_by(group) %>%
-#   mutate(mean_dif = mean(val) - val)
-# 
-# 
-# ar_str_dif$group <- factor(ar_str_dif$group)
-# 
-# ggplot(data = ar_str_dif, aes(x,y, fill = mean_dif)) +
-#   facet_grid(. ~ test, labeller = label)+
-#   geom_tile(aes(size = 0.25))  +
-#   scale_fill_gradient2(low = "darkorange", mid = "white", high = "purple")+
-#   geom_text(aes(x = x, y = y, label = round(val,3), size = 1.4)) +
-#   theme(legend.position = "none",
-#         axis.line = element_blank(),
-#         axis.text=element_text(size=12),
-#         axis.title=element_blank(),
-#         axis.text.y = element_text(margin = margin(t = 0, r = -10,
-#                                                    b = 0, l = 0),
-#                                    size = 15),
-#         axis.text.x = element_text(margin = margin(t = -10, r = 0,
-#                                                    b = 0, l = 0),
-#                                    size = 15),
-#         axis.ticks.y=element_blank(),
-#         axis.ticks.x=element_blank(),
-#         plot.title = element_text(hjust = -0.1))
-
-```
-
-```{r MCCR, echo = F, fig.align='center',fig.width = 8, fig.height= 3.25}
-#Matthew correlation coefficient
-p_resultsm <- p_results %>% mutate(`Trend strength`,
-                                   actual = plyr::mapvalues(`Trend strength`, from = c("strong trend","medium trend",
-                                                                                       "weak trend", "no trend"),
-                                             to = c(1,1,1,0))) %>%
-  mutate(predict = ifelse(Value < 0.05,1,0 ))
-
-mk <- p_resultsm[p_resultsm$method == 'mk',]
-pw <- p_resultsm[p_resultsm$method == 'pw',]
-gls <- p_resultsm[p_resultsm$method == 'gls',]
-gls_boot <- p_resultsm[p_resultsm$method == 'gls_boot',]
-
-
-#plotting MCCR across AR strengths
-df <- p_resultsm
-mccr_ar <- function(df,ar,time = NULL){
-  if(!is.null(time)){
-    z <- df[df$timeseries.length == time,]
-    z_mccr <- mccr(z$actual, z$predict)
-    return(as.numeric(z_mccr)) 
-  } else {
-    z <- df[df$AR.strength == ar,]
-    z_mccr <- mccr(z$actual, z$predict)
-    return(as.numeric(z_mccr))  
-  }
- 
-}
-
-mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
-                var = c("no AR","med. AR AR","strong AR"),
-                Test = "Mann-Kendall",
-                id = "AR Strength")
-mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
-                var = c("no AR","med. AR","strong AR"),
-                Test = "MK-TFPW",
-                id = "AR Strength")
-mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
-                 var = c("no AR","med. AR","strong AR"),
-                 Test = "GLS",
-                 id = "AR Strength")
-mcc_gls_boot <- data.frame(mcc = c(mccr_ar(gls_boot, "no AR"),mccr_ar(gls_boot, "medium AR"),mccr_ar(gls_boot, "strong AR")),
-                 var = c("no AR","med. AR","strong AR"),
-                 Test = "GLS /w bootstrap",
-                 id = "AR Strength")
-
-mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls, mcc_gls_boot)
-
-ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
-  geom_line(aes(color = Test), size = 1.1) +
-  geom_point(aes(color = Test), size = 1.5) +
-  scale_x_discrete(limits=c("no AR","med. AR","strong AR"))+
-  labs(x = "Autocorrelation strength",
-       y = "MCC") +
-  theme(axis.text = element_text(colour="grey20",size=11,hjust=.5,vjust=.5,face="plain"),
-        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
-        axis.title.y = element_text(colour="grey20",size=17,face="plain"),
-        legend.position = "none")
-
-#MCCR across time series lengths
-
-mcc_mk_time <- data.frame(mcc = c(mccr_ar(mk, time = 10),mccr_ar(mk, time = 20),mccr_ar(mk, time = 30)),
-                     var = c(10,20,30),
-                     Test = "Mann-Kendall",
-                     id = "Series Length")
-mcc_pw_time <- data.frame(mcc = c(mccr_ar(pw, time = 10),mccr_ar(pw, time = 20),mccr_ar(pw, time = 30)),
-                          var = c(10,20,30),
-                     Test = "MK-TFPW",
-                     id = "Series Length")
-mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 20),mccr_ar(gls, time = 30)),
-                           var = c(10,20,30),
-                      Test = "GLS",
-                      id = "Series Length")
-mcc_gls_boot_time <- data.frame(mcc = c(mccr_ar(gls_boot, time = 10),mccr_ar(gls_boot, time = 20),mccr_ar(gls_boot, time = 30)),
-                           var = c(10,20,30),
-                      Test = "GLS w/ bootstrap",
-                      id = "Series Length")
-
-mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time, mcc_gls_boot_time)
-
-
-time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
-  geom_line(aes(color = Test), size = 1.1) +
-  geom_point(aes(color = Test), size = 1.5) +
-  scale_x_discrete(limits=c(10,20,30))+
-  labs(x = "Series length",
-       y = "MCC") +
-  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
-        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
-        axis.title.y = element_text(colour="grey20",size=17,face="plain")) +
-  xlim(5,35)
-
-plot_grid(ar, time, align = "h", rel_widths = c(1, 1.51), labels = c("A","B"),
-          label_x = c(0.225,0.15),label_fontface = 'plain')
-```
-
+##References
