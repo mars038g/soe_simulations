@@ -3,9 +3,9 @@ title: "SOE Simulations Manuscript"
 author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
+  pdf_document: default
   html_document: 
     df_print: paged
-  pdf_document: default
 bibliography: SOE simulations.bib
 indent: true
 header-includes:
@@ -23,7 +23,8 @@ data.dir <- paste0(getwd(),"/data.dir/")
 knitr::opts_chunk$set(
 	echo = TRUE,
 	message = FALSE,
-	warning = FALSE
+	warning = FALSE,
+	fig.pos = 'H'
 )
 
 # list of all packages required
@@ -340,7 +341,7 @@ where $X$ is the $n\:\times\:p$ model matrix, $\beta$ is a vector of model coeff
 
 ####Generalized least squares
 
-The Generalized Least Squares (GLS) model fitting process used here was an iterative model-selection approach, where four GLS models were fit to each simulated time series. Specifically, two first-order and two second-order (quadratic) models were used. One first-order and one second-order GLS model were specified with first-order autocorrelated error structure identical to the error process used to generate simulations. 
+The Generalized Least Squares (GLS) model fitting process used here was an iterative model-selection approach. Two first order linear and two quadratic GLS models were fit to each simulated time series and best models were chosen using small sample AIC (AICc). One of each of the two linear and quadratic GLS models were specified with first-order autocorrelated error structure identical to the error process used to generate simulations. 
 
 Under $AR(1)$ error structure, the error-covariance matrix $\Sigma$ of the GLS estimator of $\beta$ is estimated by $\Sigma = \sigma^{2}P$, where $P$ is a diagonal matrix composed of error variances and autocorrelations from the data at different lag times ($\rho_{s}$). Error autocorrelations $\rho_{s}$ were estimated by restricted maximum-likelihood (REML) using the \textit{nlme} R package. The GLS estimator $b_{GLS}$ is given by
 
@@ -348,9 +349,9 @@ $$b_{GLS} = (X'\Sigma^{-1} X)^{-1}X'\Sigma^{-1}y,$$
 
 where $y$ is the response vector, and $X$ is an $n\:\times\:p$ model matrix. The covariance matrix of $b_{GLS}$ is
 
-$$b_{GLS} = (X'\Sigma^{-1}X)^{-1}.$$
+$$\mathrm{Var}(b_{GLS}) = (X'\Sigma^{-1}X)^{-1}.$$
 
-The other first and second-order GLS models were specified with normal error structure, $N(\mu,\sigma^{2})$. The best fitting model for each simulation was selected based on small sample AIC (AICc), and we performed likelihood ratio tests between parameterized and null models specifying a maximum-likelihood approach to test the null of no trend given $\alpha = 0.05$.
+The second pair of first order linear and quadratic GLS models were specified with normal error structure, $N(\mu,\sigma^{2})$. After selecting the best performing model using AICc, we performed likelihood ratio tests between the selected and null models specifying a maximum-likelihood approach to test the null of no trend given $\alpha = 0.05$.
 
 ####Mann Kendall test
 Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) (Mann 1945; Kendall 1975) and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW) (Yue et al. 2002). The MK test is a non-parametric test for trend that assumes sample data are independent and identically distributed; an assumption frequently violated in time series data. Serial correlation within sample data will lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test (von Storch 1995), such as residual pre-whitening, although pre-whitening is known to reduce the magnitude of existing trend (Yue et al. 2002). The Mann-Kendall with trend-free pre-whitening is a step-wise procedure developed by Yue et al. 2002 to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
@@ -722,7 +723,7 @@ ggplot(wk_nt, aes(color = method, y = Value,
   Under strong autocorrelation and strong trend, there were increasing rejection rates for all tests with increasing series length, except for the GLS, which had similar rejection rates in both N = 10 and N = 30 simulations. When $\beta \leq 0.8$, the pattern of increasing rejection rate with series length reverses, and for all tests except the Mann Kendall, rejection rates tend to decrease with series length. This result shows that tests developed to account for autocorrelation are not effective in detecting trend when autocorrelation is high unless the sample size is large and trend is strong. However, even with strong trend, power of these tests is limited by the presence of strong autocorrelation. As the GLS-B test was most effective in reducing the prevalence of false positives in the case of no trend and strong autocorrelation, it is the weakest in detecting a strong trend in the presence of high autocorrelation. When N = 30 with strong autocorrelation and strong trend, the GLS-B rejected the null hypothesis in less than half of the simulations ($N_{rej}/N_{Tot} = 0.440$).
 
 
-```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS-B test falsely predicted a trend when there was none in 5.5\\% of cases (white), whereas this was true in more than 23\\% of Mann-Kendall simulations.\\label{Fig3}' }
+```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS-B test falsely predicted a trend when there was none in 5.5\\% of cases (white), whereas this was true in more than 23\\% of Mann-Kendall simulations (red).\\label{Fig3}' }
 
 label <- function(variable,value){
   return(facet_names[value])
@@ -969,7 +970,17 @@ plot_grid(ar, time, align = "h", rel_widths = c(1, 1.51), labels = c("A","B"),
 ```
 
 ##Discussion
+Ecosystem reporting is vital to the development of Integrated Ecosystem Assessments (IEA), which lay out the framework for moving toward Ecosystem-Based Fishery Management (EBFM)[@Levin2009a]. Ecosystem reports inform Fishery Management Councils to contextual ecosystem information that supports single-species stock management, while also serving as a starting point for more applied IEA products like risk assessments. The key analytical foundations to all IEA products revolve around the concept of indicator change; whether in the short or long-term, although oftentimes managers are most interested in short-term, abrupt changes to indicator status [@Wagner2013]. Here we address the shortcomings of assigning significant trends to time series given common problems of small sample size and autocorrelation. Specifically, we performed a simulation experiment examining the strengths and weaknesses of four statistical models in detecting trends in time series under varying scenarios of series length, autocorrelation strength, and trend magnitude. 
 
+Our results suggest that no statistical approach excelled under all simulated conditions, although there were standouts. For example, the GLS-B method was particularly strong in avoiding Type I error (i.e. falsely rejecting the null hypothesis in the absence of trend), but more likely to commit Type II error (i.e. failing to reject the null hypothesis in the presence of trend) in the presence of strong autocorrelation. Unsurprisingly, the Mann-Kendall test, which assumes independence of observations, performed poorly given simulations with any level of autocorrelation. The GLS test we implemented was unique in that it allowed for quadratic model fits and relied upon an information criterion based model selection approach. The GLS model-selection approach had the highest power across tests outside of scenarios with strong autocorrelation, but suffered from high Type I error when data had strong autocorrelation (performing worse than the MK test when N=10 with no trend). The MK-PW approach found the middle ground between GLS and GLS-B in most all scenarios under strong autocorrelation. 
+
+We also focused on the ability of tests to detect weak, but empirically not uncommon, trend strengths in simulated times series, and found that under the limitations imposed by series lengths $\leq$ 30, no test was effective in detecting trend. This result supports the work of others [e.g. Wagner2013] suggesting that small changes in trend (<1% change in our case) are difficult to detect in time series regardless of autocorrelation strength for small samples sizes. 
+
+To help ameliorate the common problem of low sample size in indicator analyses, @Wagner2013 suggest the use of Bayesian inference frameworks, which provide a more flexible approach to trend analysis than the binary outcomes of hypothesis testing. Specifically, their work cites Dynamic Linear Models (DLM) as a possible way forward for indicators with small samples size. A DLM approach allows for model coefficients (e.g. slope) to change with time while providing probabilities of rate changes. The implementation of DLM in the reporting of disparate ecosystem indicators may be hindered by lack of informed priors in all cases, although the use of uninformed priors could be a starting point. 
+<!--
+Although we focused solely on trend detection in indicator time series, our results imply that the limitations inherent within short time series be taken into account during the indicator selection stage. 
+--> 
+ 
 
 
 
