@@ -1,0 +1,1259 @@
+---
+title: "SOE Simulations Manuscript"
+author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
+date: "June 29, 2018"
+output:
+  pdf_document: default
+  html_document: 
+    df_print: paged
+bibliography: SOE simulations.bib
+indent: true
+header-includes:
+   - \usepackage{setspace}
+   - \doublespacing
+   - \usepackage{float}
+   - \usepackage[bottom]{footmisc}
+---
+
+```{r setup, include=FALSE}
+# rmarkdown::render("SOE_simulations_methods.Rmd", "all") # for both pdf and html
+
+data.dir <- "data.dir/"
+knitr::opts_chunk$set(
+	echo = TRUE,
+	message = FALSE,
+	warning = FALSE,
+	fig.pos = 'H'
+)
+
+# list of all packages required
+packages <- c("stringi","boot","tinytex","Kendall","zoo","zyp",
+              "trend","dplyr","AICcmodavg","nlme",
+              "gtools","tidyr","stringr","ggplot2",
+              "data.table","scales","RColorBrewer",
+              "colorspace","mccr","cowplot")
+
+installLoadPackages <- function(pkg){
+    new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+    if (length(new.pkg)) 
+        install.packages(new.pkg, dependencies = TRUE,repos='http://cran.us.r-project.org')
+    sapply(pkg, require, character.only = TRUE)
+}
+
+installLoadPackages(packages)
+
+```
+
+<!--Function-->
+```{r functions, echo = F}
+fit_lm <- function(dat, ar, m, ARsd, trend, spec = FALSE){
+  success <- FALSE
+  while(!success){
+    dat <- dat %>% dplyr::filter(complete.cases(.))
+    
+    # Constant model (null model used to calculate 
+    # overall p-value)
+    constant_norm <-nlme::gls(series ~ 1, data = dat)
+    
+    #spec parameter specifies whether arima.sim incorporated AR(1) error process. When there is no 
+    #AR error in the time series, we switch the GLS models to all rely on a normal error generating process.
+    if (!spec){
+      constant_ar1 <-
+        try(nlme::gls(series ~ 1,
+                      data = dat,
+                      correlation = nlme::corAR1(form = ~time)))
+      if (class(constant_ar1) == "try-error"){
+        return(best_lm <- data.frame(model = NA,
+                                     aicc  = NA,
+                                     coefs..Intercept = NA,
+                                     coefs.time = NA,
+                                     coefs.time2 = NA,
+                                     pval = NA))
+      }
+      
+    } else {
+      constant_ar1 <-
+        try(nlme::gls(series ~ 1,
+                      data = dat))
+      if (class(constant_ar1) == "try-error"){
+        return(best_lm <- data.frame(model = NA,
+                                     aicc  = NA,
+                                     coefs..Intercept = NA,
+                                     coefs.time = NA,
+                                     coefs.time2 = NA,
+                                     pval = NA))
+      }
+    }
+    # Linear model with normal error
+    linear_norm <- nlme::gls(series ~ time, data = dat)
+    
+    # Linear model with AR1 error
+    if (!spec){
+      linear_ar1 <- 
+        try(nlme::gls(series ~ time, 
+                      data = dat,
+                      correlation = nlme::corAR1(form = ~time)))
+      if (class(linear_ar1) == "try-error"){
+        return(best_lm <- data.frame(model = NA,
+                                     aicc  = NA,
+                                     coefs..Intercept = NA,
+                                     coefs.time = NA,
+                                     coefs.time2 = NA,
+                                     pval = NA))
+        }
+      } else {
+        linear_ar1 <- 
+          try(nlme::gls(series ~ time, 
+                        data = dat))
+        if (class(linear_ar1) == "try-error"){
+          return(best_lm <- data.frame(model = NA,
+                                       aicc  = NA,
+                                       coefs..Intercept = NA,
+                                       coefs.time = NA,
+                                       coefs.time2 = NA,
+                                       pval = NA))
+      }
+    }
+    linear_phi <- linear_ar1$modelStruct$corStruct
+    linear_phi <-coef(linear_phi, unconstrained = FALSE)
+    
+    # Polynomial model with normal error
+    dat$time2 <- dat$time^2
+    poly_norm <- nlme::gls(series ~ time + time2, data = dat)
+    
+    # Polynomial model with AR1 error
+    if (!spec){
+      poly_ar1 <- 
+        try(nlme::gls(series ~ time + time2, 
+                      data = dat,
+                      correlation = nlme::corAR1(form = ~time)))
+      if (class(poly_ar1) == "try-error"){
+        return(best_lm <- data.frame(model = NA,
+                                     aicc  = NA,
+                                     coefs..Intercept = NA,
+                                     coefs.time = NA,
+                                     coefs.time2 = NA,
+                                     pval = NA))
+        
+      }
+    }else {
+      poly_ar1 <- 
+        try(nlme::gls(series ~ time + time2, 
+                      data = dat))
+      if (class(poly_ar1) == "try-error"){
+        return(best_lm <- data.frame(model = NA,
+                                     aicc  = NA,
+                                     coefs..Intercept = NA,
+                                     coefs.time = NA,
+                                     coefs.time2 = NA,
+                                     pval = NA))
+        
+      }
+    }
+    poly_phi <- poly_ar1$modelStruct$corStruct
+    poly_phi <- coef(poly_phi, unconstrained = FALSE)
+    
+    # Calculate AICs for all models
+    df_aicc <-
+      data.frame(model = c("poly_norm",
+                           "poly_ar1",
+                           "linear_norm",
+                           "linear_ar1"),
+                 aicc  = c(AICc(poly_norm),
+                           AICc(poly_ar1),
+                           AICc(linear_norm),
+                           AICc(linear_ar1)),
+                 coefs = rbind(coef(poly_norm),
+                               coef(poly_ar1),
+                               c(coef(linear_norm), NA),
+                               c(coef(linear_ar1),  NA)),
+                 phi = c(0, 
+                         poly_phi,
+                         0,
+                         linear_phi),
+                 # Calculate overall signifiance (need to use
+                 # ML not REML for this)
+                 pval = c(anova(update(constant_norm, method = "ML"),
+                                update(poly_norm, method = "ML"))$`p-value`[2],
+                          anova(update(constant_ar1, method = "ML"),
+                                update(poly_ar1, method = "ML"))$`p-value`[2],
+                          anova(update(constant_norm, method = "ML"),
+                                update(linear_norm, method = "ML"))$`p-value`[2],
+                          anova(update(constant_ar1, method = "ML"),
+                                update(linear_ar1, method = "ML"))$`p-value`[2]))
+    
+    best_lm <-
+      df_aicc %>%
+      dplyr::filter(aicc == min(aicc))
+    if (nrow(best_lm) >1){
+      best_lm <- best_lm[1,]
+    }
+    phi <- best_lm$phi
+    success <- (phi <= 0.8 & !invalid(phi))
+    
+    
+    dat <- trend + dat
+    dat <- arima.sim(list(ar = ar), n=m, rand.gen=rnorm, sd = ARsd)
+    dat <- data.frame(series = dat,
+                      time = 1:length(dat))
+    
+  }
+  if (best_lm$model == "poly_norm") {
+    model <- poly_norm
+  } else if (best_lm$model == "poly_ar1") {
+    model <- poly_ar1
+  } else if (best_lm$model == "linear_norm") {
+    model <- linear_norm
+  } else if (best_lm$model == "linear_ar1") {
+    model <- linear_ar1
+  }
+  return(list(best_lm = best_lm, 
+              model = model))
+}
+
+#wide to long function (Sean Lucey)
+w2l <- function(x, by, by.name = 'Time', value.name = 'Value'){
+  x.new <- copy(x)
+  var.names <- names(x)[which(names(x) != by)]
+  out <- c()
+  setnames(x.new, by, 'by')
+  for(i in 1:length(var.names)){
+    setnames(x.new, var.names[i], 'V1')
+    single.var <- x.new[, list(by, V1)]
+    single.var[, Var := var.names[i]]
+    out <- rbindlist(list(out, single.var))
+    setnames(x.new, 'V1', var.names[i])
+  }
+  setnames(x.new, 'by', by)
+  setnames(out, c('by', 'V1'), c(by.name, value.name))
+}
+
+get_error <- function(test, err_type, input, l, full = T){
+ if (test == "gls"){
+   gls_out <- tryCatch({
+     
+     mod <- input
+     newtime <- seq(1, l, 1)
+     newdata <- data.frame(time = newtime,
+                           time2 = newtime^2)
+     gls_sim <- AICcmodavg::predictSE(mod$model, 
+                                      newdata = newdata,
+                                      se.fit = T)
+     gls_pred <- gls_sim$fit
+     
+     if(!full){
+       y = get(y)[j:x]
+     } else {
+       y = get(y)
+     }
+     
+     if (err_type == "rmse"){
+       sqrt(mean((y-gls_pred)^2))
+     } else if (err_type == "mae") {
+       mean(abs(y-gls_pred))
+     }
+     
+   }, 
+   error = function(e) {
+     'error'
+   })
+   return(gls_out)
+   
+ } else if (test == "pw"){
+   mod <- input
+   pw_pred <- mod[[11]] + 1:l * mod[[2]]
+   
+    if(!full){
+       y = get(y)[j:x]
+     } else {
+       y = get(y)
+     }
+   
+   if (err_type == "rmse"){
+     pw_out <- sqrt(mean((y-pw_pred)^2))
+   } else if (err_type == "mae") {
+     pw_out <- mean(abs(y-pw_pred))
+   }
+ }
+  return(pw_out)
+}
+
+```
+
+```{r constants for simulations, echo = F}
+
+#set seed
+set.seed(123)
+
+
+run <- F #Run simulations or pull from previous results
+nsims = 1000 #number of simulations
+ARsd <- .54^.5 #standard deviation of innovations
+
+#AR strengths
+NOAR <- list()
+medAR <- 0.433
+strongAR <- 0.8
+
+date <- "2018-07-21"
+x <- 30
+```
+##Abstract
+
+##Introduction
+
+  The development and analysis of indicators plays a key strategic role in implementing the Ecosystem Approach for a host of science, management, and intergovernmental organizations [e.g. @NOAA2006; @ICES2013; @SecretariatoftheConventiononBiologicalDiversity2004; @Pices2010; @Garcia2003; @Levin2009a]. At least partially in support of this, substantial effort has been invested in assessing indicator status and trends for the purpose of ecosystem reporting, in all of its guises [e.g. @Garfield2016; @NEFSC2018; @NEFSC2018a; @Blanchard2010; O'Brien 2017; @Butchart2010]. 
+
+  Ecosystem-level indicators often vary greatly with respect to the length of the series under investigation. The ultimate goal of providing integrated advice often leads analysts to truncate longer datasets; generating a consistent series length across indicators for comparison purposes [e.g. @Blanchard2010; @Shin2010; @Shannon2010; @Canales2015]. Further reinforcing this approach is the fact that managers tend to focus on short-term issues [@SecretariatoftheConventiononBiologicalDiversity2004; @Wagner2013], which ultimately necessitates the assessment of trajectories at relatively short time scales.  
+
+  These issues can lead to the use of short time series for the purpose of ecosystem reporting; i.e. less than 20 data points per indicator [@Blanchard2010; @Shin2010; @Shannon2010; @Canales2015; @Mackas2001; @Nicholson2004]. Statistical trend analysis of indicator data is the gold standard for managers, stakeholders, and analysts. However, in reality trend analysis in this context can be extremely difficult. Evidence indicates that the statistical power to identify trends using short time series may be limited in general [@Nicholson2004; @Wagner2013]. The hydrological and climatological literature shows that autocorrelation in time series can falsely inflate trend detection rates when models are incorrectly specified assuming the independence of error terms [@Kulkarni1995; @VonStorch1999a; @Zhang2000; @Wang2001a; @Yue2002a; @Bayazit2015].The magnitude of assigned trends can also be inflated by the presence of autocorrelation, and both of these problems are amplified by short time series [@Kulkarni1995; @Yue2002a]. Despite this, there has been no systematic investigation for the performance of models in detecting trends across the full breadth of indicators utilized in ecosystem reporting.
+
+  In this manuscript we abstract away from issues surrounding the identification and vetting of appropriate indicators, but note that this in itself can be a challenging undertaking for which @Bundy2017 present a survey of the literature. We focus, instead, on the ability to statistically identify trends for the broad array of indicators used in marine ecosystem reporting; ranging from large-scale climatological and oceanographic drivers through the benefits derived by human society. We use Monte Carlo simulations to assess the performance of the most commonly applied statistical models under a range of time series lengths, trend strengths, and autocorrelation regimes. The simulations are parameterized using the properties of indicators currently presented in the Mid-Atlantic and New England State of the Ecosystem Reports, which are annual ecosystem status reports tailored for the U.S. Mid-Atlantic and New England Fishery Management Councils respectively [@NEFSC2018; @NEFSC2018a]. 
+  
+  Results indicate that correctly identifying trends is problematic using less than 30 data points, with both Type I and Type II error common. Even under the strongest signal-noise ratio (i.e. strong trends and no autocorrelation) tests perform poorly with only ten data points. The simulations highlight problems associated with standardizing approaches across indicators, and suggest that further thought is warranted on status and trend analysis in the context of ecosystem reporting.
+
+##Methods
+####Simulations
+Simulated time series were generated through the addition of $AR(1)$ autoregressive processes to first-order linear models:
+
+$$y = X\beta + \varepsilon_{t}, \:\: \mathrm{where} \:\: \varepsilon_{t} = \phi\varepsilon_{t-1} + \nu_{t}$$
+
+where $X$ is the $n\:\times\:p$ model matrix, $\beta$ is a vector of model coefficients, and $\varepsilon_{t}$ is the $AR1$ error process; the strength of which is given by $\phi$. $\nu_{t}$ is assumed to be derived from Gaussian white noise. The levels of $\beta$ in our study were 0.004, .051, and .147, which we combined with four levels of $\phi$: 0, .43, .8, .95. These levels were chosen based on a preliminary analysis characterizing the distribution of trend and autocorrelation strengths across 2017 State of the Ecosystem time series data. Time series used in this preliminary step were normalized by $(y-\bar{y})/y_{sd}$ before parameter identification. 1000 simulations were implemented for all combinations of trend and autocorrelation strength. To test the null hypothesis of no trend in simulated time series, we used Generalized Least Squares, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
+
+####Generalized least squares
+
+The Generalized Least Squares (GLS) model fitting process used here was an iterative model-selection approach. Two first order linear and two quadratic GLS models were fit to each simulated time series and best models were chosen using small sample AIC (AICc). One of each of the two linear and quadratic GLS models were specified with first-order autocorrelated error structure identical to the error process used to generate simulations. 
+
+Under $AR(1)$ error structure, the error-covariance matrix $\Sigma$ of the GLS estimator of $\beta$ is estimated by $\Sigma = \sigma^{2}P$, where $P$ is a diagonal matrix composed of error variances and autocorrelations from the data at different lag times ($\rho_{s}$). Error autocorrelations $\rho_{s}$ were estimated by restricted maximum-likelihood (REML) using the \textit{nlme} R package. The GLS estimator $b_{GLS}$ is given by
+
+$$b_{GLS} = (X'\Sigma^{-1} X)^{-1}X'\Sigma^{-1}y,$$
+
+where $y$ is the response vector, and $X$ is an $n\:\times\:p$ model matrix. The covariance matrix of $b_{GLS}$ is
+
+$$\mathrm{Var}(b_{GLS}) = (X'\Sigma^{-1}X)^{-1}.$$
+
+The second pair of first order linear and quadratic GLS models were specified with normal error structure, $N(\mu,\sigma^{2})$. After selecting the best performing model using AICc, we performed likelihood ratio tests between the selected and null models specifying a maximum-likelihood approach to test the null of no trend given $\alpha = 0.05$.
+
+####Mann Kendall test
+Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) (Mann 1945; Kendall 1975) and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW) (Yue et al. 2002). The MK test is a non-parametric test for trend that assumes sample data are independent and identically distributed; an assumption frequently violated in time series data. Serial correlation within sample data will lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test (von Storch 1995), such as residual pre-whitening, although pre-whitening is known to reduce the magnitude of existing trend (Yue et al. 2002). The Mann-Kendall with trend-free pre-whitening is a step-wise procedure developed by Yue et al. 2002 to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
+
+$$S = \sum_{i=1}^{n-1}\sum_{j=i+1}^{n}\textrm{sgn}(y_{j} - y_{i}),$$
+where $y$ is the response vector, $n$ is the length of the series, and
+
+$$\textrm{sgn}(x)=\begin{Bmatrix}
+1 & \textrm{if}\:x>0\\ 
+0 & \textrm{if}\:x=0\\ 
+-1 & \textrm{if}\:x<0
+\end{Bmatrix}.$$
+
+When there are no ties in the data, the variance of $S$ is given by 
+
+$$V(S) = \frac{n(n-1)(2n+5)}{18},$$
+and the distribution of $S$ when $n \geq 8$ is approximately normal and symmetric about a mean of 0. We then perform a two-sided test for trend using the standardized $Z$ statistic:
+
+$$\textrm{Z}=\begin{Bmatrix}
+\frac{S-1}{\sqrt{V(S)}} & S>0\\ 
+0 & S=0\\ 
+\frac{S+1}{\sqrt{V(S)}} & S<0\\ 
+\end{Bmatrix},$$
+
+which is drawn from a normal distribution with mean of zero and variance of one. Following Yue et al. 2002, a $P$ value for the test is determined using the standard normal cumulative distribution function
+
+$$P = \int_{\infty}^{Z}e^{-t^{2}/2}\mathrm{d}t.$$
+For significance level $\alpha$, if $Z_{a/2} > |P|$, then we reject $H_{0}$ of no trend.  
+
+
+####Mann-Kendall trend-free pre-whitening (MK-TFPW)
+The Mann Kendall trend-free pre-whitening procedure as developed by Yue et al. 2002 is composed of four steps:
+```{r render list, results='asis', eval = T, echo = F}
+
+if(knitr::is_latex_output()){
+  cat("\\begin{enumerate}\\item \\textit{Removal of trend} - The slope of trend $b$ is estimated using the Theil-Sen estimator (Theil 1950a-c; Sen 1968) and removed from sample data if different from zero, where $b$ is given by
+$$b = \\mathrm{Median}\\left (\\frac{X_{j} - X_{i}}{j - l}\\right)\\forall l < j .$$
+Trend $b$ is removed from the series by
+$$X_{t}^{'} = X_{t} - bt,$$
+where $X_{t}$ is the original series at time step $t$.
+\\item \\textit{Trend-free pre-whitening} - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\\rho_{1}$ is computed using 
+$$\\rho_{k} = \\frac{  \\frac{1}{n-k} \\sum_{t=1}^{n-k}[X_{t} - E(X_{t})][X_{t+k} - E(X_{t})]}  {\\frac{1}{n}\\sum_{t=1}^{n}[X_{t} - E(X_{t})]^2},$$
+where $E(X_{t})$ is the mean of the series and $\\rho_{k}$ is the lag-$k$ autocorrelation coefficient. Serial correlation is then removed from the detrended series $X_{t}^{'}$ by 
+$$Y_{t}^{'} = X_{t}^{'} - \\rho_{1}X_{t}^{'}.$$
+\\item \\textit{Blending trend and residual series} - Trend $b$ is added to the independent residual series $Y_{t}^{'}$ by 
+$$Y_{t} = Y_{t}^{'} + bt.$$
+\\item \\textit{MK test} - Trend is assessed through the application of the Mann Kendall test as discussed above.
+
+\\end{enumerate}")
+} else if (knitr::is_html_output()){
+    cat("1. *Removal of trend* - The slope of trend $b$ is estimated using the Theil-Sen estimator (Theil 1950a-c; Sen 1968) and removed from sample data if different from zero, where $b$ is given by
+$$b = \\mathrm{Median}\\left (\\frac{X_{j} - X_{i}}{j - l}\\right)\\forall l < j .$$
+Trend $b$ is removed from the series by
+$$X_{t}^{'} = X_{t} - bt,$$
+where $X_{t}$ is the original series at time step $t$.
+2. *Trend-free pre-whitening* - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\\rho_{1}$ is computed using 
+$$\\rho_{k} = \\frac{  \\frac{1}{n-k} \\sum_{t=1}^{n-k}[X_{t} - E(X_{t})][X_{t+k} - E(X_{t})]}  {\\frac{1}{n}\\sum_{t=1}^{n}[X_{t} - E(X_{t})]^2},$$
+where $E(X_{t})$ is the mean of the series and $\\rho_{k}$ is the lag-$k$ autocorrelation coefficient. Serial correlation is then removed from the detrended series $X_{t}^{'}$ by 
+$$Y_{t}^{'} = X_{t}^{'} - \\rho_{1}X_{t}^{'}.$$
+3. *Blending trend and residual series* - Trend $b$ is added to the independent residual series $Y_{t}^{'}$ by 
+$$Y_{t} = Y_{t}^{'} + bt.$$
+4. *MK test* - Trend is assessed through the application of the Mann Kendall test as discussed above.")
+}
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+##Results
+####Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
+```{r assessing model power, echo = F}
+if (run){
+  # Trend parameters are from fitting a linear model to the
+# z-scored real data: 5th percentile (weak), mean (medium), 
+# 95th (strong). The mean intercept of the z-scored real
+# data was -0.262.
+LTRENDweak   <- -0.262 + (0.0255 * c(1:x)) #Linear trend
+LTRENDmedium <- -0.262 + (0.051 * c(1:x)) 
+LTRENDstrong <- -0.262 + (0.147 * c(1:x))
+# AR values are from the real data by fitting an ar1
+# model to the resids of the linear fit. The mean of
+# those values was 0.433. We also include 0.8 to 
+# investigate the effect of strong autocorrelation.
+ARmedium <- list(ar = medAR)
+ARstrong <- list(ar = strongAR)
+# Mean AR sd from the mean resids of the real data
+ARsd <- 0.54^0.5
+NOAR <- list()
+m <- x
+#Adding placeholders for simulated data
+NOTREND_NOAR <- NULL
+NOTREND_ARmedium <- NULL
+NOTREND_ARstrong <- NULL
+
+LINEARweak_NOAR <- NULL
+LINEARweak_ARmedium <- NULL 
+LINEARweak_ARstrong <- NULL 
+
+LINEARmedium_NOAR <- NULL
+LINEARmedium_ARmedium <- NULL 
+LINEARmedium_ARstrong <- NULL
+
+LINEARstrong_NOAR <- NULL
+LINEARstrong_ARmedium <- NULL 
+LINEARstrong_ARstrong <- NULL
+
+NOTREND_NOAR_RESULTS <- NULL
+NOTREND_ARmedium_RESULTS <- NULL
+NOTREND_ARstrong_RESULTS <- NULL
+
+LINEARweak_NOAR_RESULTS <- NULL
+LINEARweak_ARmedium_RESULTS <- NULL
+LINEARweak_ARstrong_RESULTS <- NULL
+
+LINEARmedium_NOAR_RESULTS <- NULL
+LINEARmedium_ARmedium_RESULTS <- NULL
+LINEARmedium_ARstrong_RESULTS <- NULL
+
+LINEARstrong_NOAR_RESULTS <- NULL
+LINEARstrong_ARmedium_RESULTS <- NULL
+LINEARstrong_ARstrong_RESULTS <- NULL
+
+
+
+error_results <- data.frame(matrix(ncol = 4, nrow = 0))
+
+#initializing simulations
+for (i in 1:nsims) {
+  print(i)
+  #Generating ar(1) simulations
+  for (k in c('ARmedium','ARstrong','NOAR')){
+
+    TEMP1 <- arima.sim(get(k), n=x, rand.gen=rnorm, sd = ARsd)
+    LTEMP1 <- TEMP1 + LTRENDweak
+    LTEMP2 <- TEMP1 + LTRENDmedium
+    LTEMP3 <- TEMP1 + LTRENDstrong
+    assign(paste0('LINEARweak_',k,sep=""),rbind(get(paste0('LINEARweak_',k,sep="")),LTEMP1))
+    assign(paste0('LINEARmedium_',k,sep=""),rbind(get(paste0('LINEARmedium_',k,sep="")),LTEMP2))
+    assign(paste0('LINEARstrong_',k,sep=""),rbind(get(paste0('LINEARstrong_',k,sep="")),LTEMP3))
+    assign(paste0('NOTREND_',k, sep=""),rbind(get(paste0('NOTREND_',k, sep="")), TEMP1))
+    
+    for (y in c('TEMP1','LTEMP1','LTEMP2','LTEMP3')){
+
+      
+      #Testing 30 year series with prewhitening Mann-Kendall technique
+      TEMP_TEST1 <- zyp.trend.vector(get(y),method='yuepilon')
+      # 30-year linear model
+      
+      er <- data.frame(error = get_error('pw',"rmse",TEMP_TEST1, l = 30),
+                 type = 'rmse',
+                 series.length = as.numeric(x),
+                 test = 'pw',
+                       ar = k,
+                       trend = y)
+      assign('error_results', rbind(error_results, er))
+      
+      TEMP_P1 <- unlist(TEMP_TEST1[6])
+      T_1 <- cbind(TEMP_P1)
+      
+      #30 year standard Mann-Kendall
+      TEMP_TEST12 <- MannKendall(get(y))
+      T_2 <- unlist(TEMP_TEST12[2])
+
+      
+      # 30-year linear model
+      if (y == "TEMP1"){
+        trend <- rep(0,x)
+      } else if (y == "LTEMP1"){
+        trend <- LTRENDweak
+      } else if (y == "LTEMP2"){
+        trend <- LTRENDmedium
+      } else if (y == "LTEMP3"){
+        trend <- LTRENDstrong
+      }
+      
+      if (k == "NOAR"){
+        TEMP_lm <- fit_lm(dat = data.frame(series = get(y) %>% as.numeric,
+                                         time = 1:length(get(y))),
+                          spec = TRUE, trend = trend, ar = unlist(get(k)),
+                          m = x, ARsd = ARsd)
+      } else {
+       TEMP_lm <- fit_lm(dat = data.frame(series = get(y) %>% as.numeric,
+                                         time = 1:length(get(y))), trend = trend,
+                         ar = unlist(get(k)),m = x, ARsd = ARsd)
+      }
+      
+      er <- data.frame(error = get_error('gls',"rmse",TEMP_lm, l = 30),
+                       type = 'rmse',
+                       series.length = as.numeric(x),
+                       test = 'gls',
+                       ar = k,
+                       trend = y)
+      
+      assign('error_results', rbind(error_results, er))
+
+      T_lm <- TEMP_lm$best_lm$pval
+      
+      
+      for (j in c(11,21)) {
+        #Testind 20 & 10 year series with prewhitening Mann-Kendall technique
+        TEMP_TEST2 <- zyp.trend.vector(get(y)[j:x],method='yuepilon')
+        
+        er <- data.frame(error = get_error('pw',"rmse",TEMP_TEST2, l = length(get(y)[j:x]), full = F),
+                 type = 'rmse',
+                 series.length = as.numeric(length(get(y)[j:x])),
+                 test = 'pw',
+                       ar = k,
+                       trend = y)
+        assign('error_results', rbind(error_results, er))
+        
+        
+        TEMP_P2 <- unlist(TEMP_TEST2[6])
+        T_1 <- cbind(T_1,TEMP_P2)
+        
+        #Now standard Mann_Kendall
+        TEMP_TEST22 <- MannKendall(get(y)[j:x])
+        TEMP_P22 <- unlist(TEMP_TEST22[2])
+        T_2 <- cbind(T_2,TEMP_P22)
+        
+        # 20-year and 10-year linear model
+        TEMP_lm <- tryCatch({
+          
+          #Correctly specifies model when no AR error in simulated time series
+          if (k == "NOAR"){
+            TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+                                             time = 1:length(get(y)[j:x])),
+                            spec = TRUE, trend = trend[j:x], ar = unlist(get(k)),
+                            m = length(get(y)[j:x]), ARsd = ARsd)
+          } else{
+            TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[j:x] %>% as.numeric,
+                                             time = 1:length(get(y)[j:x])), trend = trend[j:x],
+                           ar = unlist(get(k)),m = length(get(y)[j:x]), ARsd = ARsd)
+            
+          }
+          
+        }, 
+        error = function(e) {
+          TEMP_lm <- NA
+        })
+        
+        er <- data.frame(error = get_error('gls',"rmse",TEMP_lm, l = length(get(y)[j:x]), full = F),
+                 type = 'rmse',
+                 series.length = as.numeric(length(get(y)[j:x])),
+                 test = 'gls',
+                       ar = k,
+                       trend = y)
+        assign('error_results', rbind(error_results, er))
+        
+        T_lm <- cbind(T_lm, TEMP_lm[[1]]$pval)
+
+        
+      }
+      
+      colnames(T_1) <- c('p_30_pw','p_20_pw','p_10_pw')
+      colnames(T_2) <- c('p_30_mk','p_20_mk','p_10_mk')
+      colnames(T_lm) <- c('p_30_gls','p_20_gls','p_10_gls')
+      
+      
+      if (y=='TEMP1' & k!='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
+                                          rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
+                                                cbind(T_1,T_2, T_lm)))
+        
+      } else if (y=='TEMP1' & k=='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
+                                                 rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
+                                                       cbind(T_1,T_2, T_lm)))
+      } else if (y=='LTEMP1') {assign(paste0('LINEARweak_',k,'_RESULTS',sep=""),
+                                      rbind(get(paste0('LINEARweak_',k,'_RESULTS',sep="")),
+                                            cbind(T_1,T_2, T_lm)))
+      } else if (y=='LTEMP2') {assign(paste0('LINEARmedium_',k,'_RESULTS',sep=""),
+                                      rbind(get(paste0('LINEARmedium_',k,'_RESULTS',sep="")),
+                                            cbind(T_1,T_2, T_lm)))
+      } else if (y=='LTEMP3') {assign(paste0('LINEARstrong_',k,'_RESULTS',sep=""),
+                                      rbind(get(paste0('LINEARstrong_',k,'_RESULTS',sep="")),
+                                            cbind(T_1,T_2, T_lm)))}
+      }
+  
+    }
+  }
+}
+
+```
+
+```{r simulation results processing}
+#convert Monte Carlo simulation output
+# from wide to long format for plotting
+
+if (run){
+results <- c("NOTREND_ARmedium_RESULTS", "NOTREND_NOAR_RESULTS", "NOTREND_ARstrong_RESULTS",
+             "LINEARweak_ARmedium_RESULTS", "LINEARweak_ARstrong_RESULTS",
+             "LINEARmedium_ARmedium_RESULTS","LINEARmedium_ARstrong_RESULTS",
+             "LINEARstrong_ARmedium_RESULTS", "LINEARstrong_ARstrong_RESULTS",
+             "LINEARweak_NOAR_RESULTS","LINEARmedium_NOAR_RESULTS","LINEARstrong_NOAR_RESULTS")
+
+p_result_mat <- list()
+for (i in 1:length(results)){
+  z <- as.data.frame(get(results[i]))
+  z <- tidyr::gather(z, Var, Value, p_30_pw:p_10_gls, factor_key = T)
+    z$results <- results[i]
+  p_result_mat[[i]] <- z
+}
+
+# Final p dataframe
+p_results <- 
+  do.call(rbind, p_result_mat) %>%
+  as.data.frame() %>%
+  tidyr::separate(Var, 
+                  c("var", "timeseries length", "method"),
+                  "_", extra = "merge", fill = "left") %>%
+  tidyr::separate(results, 
+                  c("Trend strength", "AR strength", "Results"),
+                  "_") %>%
+  dplyr::mutate(`Trend strength` = substring(`Trend strength`, first = 7),
+                `Trend strength` = ifelse(`Trend strength` == "D",
+                                          "no",
+                                          `Trend strength`),
+                `Trend strength` = paste0(`Trend strength`, " trend"),
+                `AR strength` = substring(`AR strength`, first = 3),
+                `AR strength` = ifelse(`AR strength` == "AR",
+                                       "no",
+                                       `AR strength`),
+                `AR strength` = paste0(`AR strength`, " AR")) %>%
+  dplyr::select(-Results) %>%
+  #tidyr::spread(method, Value) %>%
+  # remove runs that cause NAs in GLS (two runs out of 1000)
+  dplyr::filter(!is.na(method)) %>%
+  dplyr::mutate(`Trend strength` = factor(`Trend strength`, 
+                                          levels = c("strong trend",
+                                                     "medium trend",
+                                                     "weak trend",
+                                                     "no trend")),
+                `AR strength` = factor(`AR strength`, 
+                                       levels = c("no AR",
+                                                  "medium AR",
+                                                  "strong AR")))
+  save(p_results, file = paste0(data.dir,"power_results","_",Sys.Date(),".Rdata"))
+  
+} else if (!run){
+  
+  load(file.path(data.dir,"power_results_2018-08-27.Rdata"))
+  
+}
+
+
+
+
+
+```
+
+```{r power subset, echo = F}
+if (run){
+
+nsims = 500 #number of simulations
+nBootSims <- 500 #number of bootstrap samples
+ARsd <- .54^.5 #standard deviation of innovations
+set.seed(123)
+strongAR <- 0.5
+ARstrong <- list(ar = strongAR)
+ARsd <- 0.54^0.5
+NOAR <- list()
+nsims <- 1000
+ts_length <- seq(50,500,50)
+trend <- rep(0,x)
+
+notrend_arstrong <- NULL
+
+
+for (i in ts_length){
+  print(paste("series length",i))
+  for (j in 1:nsims){
+    #simulate
+    temp <-arima.sim(ARstrong, n=i, rand.gen=rnorm, sd = ARsd)  
+    
+    #MannKendal with trend-free pre-whitening
+    mkpw <- zyp.trend.vector(temp,method='yuepilon')
+    mkpw_p <- unlist(mkpw[6])
+    T_1 <- cbind(mkpw_p)
+    
+    #Mann-Kendall
+    mk <- MannKendall(temp)
+    T_2 <- unlist(mk[2])
+    
+    #GLS-MS
+    trend <- rep(0,i)
+    #print(length(trend))
+    gls_mod <- fit_lm(dat = data.frame(series = temp %>% as.numeric,
+                                       time = 1:length(temp)), trend = trend,
+                      ar = unlist(ARstrong),m = i, ARsd = ARsd)
+    
+    T_lm <- gls_mod$best_lm$pval
+    
+    p_df <- data.frame(var = c("mkpw","mk","gls"),
+                       p = c(T_1, T_2, T_lm),
+                       n = i)
+    print(paste("simulation",j))
+    assign("notrend_arstrong",rbind(notrend_arstrong, p_df))
+    
+    }
+  
+  }
+
+}
+```
+
+```{r power subset figure, fig.align="center", fig.asp=0.45}
+load(file.path(data.dir, "strARnoTr_50_500_50_1000.Rdata"))
+
+pow <- out %>% group_by(var, n) %>% dplyr::summarise(rej_prop = length(p[p<0.05])/n())
+
+ggplot(pow, aes(x = n, y = rej_prop, group = var,fill = var)) +
+  geom_bar(stat = "identity",position = "dodge") +
+  geom_hline(yintercept=0.05, linetype="dashed", 
+             color = "red", size=1) +
+  ylab(expression(paste(N[Rej],"/",N[Tot],sep=""))) +
+  xlab("Series Length")
+```
+
+  Simulation results show that no test for trend exceeded in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere [@Yue2002a; @Yue2002b], we show in Figure \ref{Fig1} that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detecting trends in series with N < 30. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. The rate of failing to reject the null hypothesis in the presence of trend decreased to < 0.1 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. When $\beta$ was greater than 0.04 under no autocorrelation and $N \geq 20$, the GLS test showed the highest rejection rate compared to other tests. Although slightly inflated when N=10, all tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios.
+  
+```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the ratio of number of rejections (\\textit{p}<0.05) to number of total simulations. Subplots are representative of different autocorrelation and trend scenarios, with time series length increasing along the x axis. Colored bars show results from different tests for trend.\\label{Fig1}"}
+p_agg <- p_results %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
+                        method) %>% dplyr::summarise(prop = length(Value[Value < 0.05])/n())
+
+p_agg$`Trend strength` = factor(p_agg$`Trend strength`, levels=c('strong trend','medium trend','weak trend','no trend'))
+p_agg$`AR strength` = factor(p_agg$`AR strength`, levels=c('no AR','medium AR','strong AR'))
+p_agg$`timeseries length` = factor(p_agg$`timeseries length`, levels=c(10,20,30))
+
+ggplot(p_agg, aes(color = method, y = prop, 
+                      x = `timeseries length`)) +
+  geom_bar(stat = "identity", position = "dodge",
+           fill = "grey95", size = 0.75) +
+  facet_grid(`Trend strength` ~ `AR strength`) +
+  ylab(expression(paste(N[Rej],"/",N[Tot],sep=""))) +
+  xlab("Series length") +
+  theme_bw()
+
+```
+
+  Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@Yue2002a]. Identifying this problem led to the development of the MK-PW and other stepwise approaches that sought to address issues introduced by the MK-test when assumptions of independence are violated (Wang et al. 2000, Yue et al. 2002). Our work agrees with these authors and others (von Storch 1995) showing that under no simulated trend, introducing autocorrelation leads to inflated rejection rates in the MK test. Figure 1 shows that under no trend and strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates under both medium and strong autocorrelation scenarios with increasing series length.
+
+  The GLS-B test was by far the strongest test under the no trend and strong autocorrelation scenario. When N = 30, the rejection rate of the GLS-B test was 0.046. At N = 20, the rejection rate for this test was slightly inflated to 0.078. Under all autocorrelation and trend strength parameters when N=30, the GLS-B test incorrectly rejected the null in only 5.5\% of cases; correctly accepting the null in 94.8\% of simulations (Figure \ref{Fig3}).  The next best test was the MK-PW approach. The rejection rate for this test when N = 30 was close to five times the rate of the GLS-B under the same scenario at 0.222. The GLS test showed the worst performance of tests accounting for $AR(1)$ error structure, although rejection rates followed the trend of decreasing with series length. When N = 30, the GLS test rejection rate was 0.262. Patterns in rejection rate under weak trend ($\beta = 0.004$) and strong autocorrelation were similar to those seen in the no trend and strong autocorrelation scenario (Figure \ref{Fig2}). 
+
+  Under strong autocorrelation and strong trend, there were increasing rejection rates for all tests with increasing series length, except for the GLS, which had similar rejection rates in both N = 10 and N = 30 simulations. When $\beta \leq 0.8$, the pattern of increasing rejection rate with series length reverses, and for all tests except the Mann Kendall, rejection rates tend to decrease with series length. This result shows that tests developed to account for autocorrelation are not effective in detecting trend when autocorrelation is high unless the sample size is large and trend is strong. However, even with strong trend, power of these tests is limited by the presence of strong autocorrelation. As the GLS-B test was most effective in reducing the prevalence of false positives in the case of no trend and strong autocorrelation, it is the weakest in detecting a strong trend in the presence of high autocorrelation. When N = 30 with strong autocorrelation and strong trend, the GLS-B rejected the null hypothesis in less than half of the simulations ($N_{rej}/N_{Tot} = 0.440$).
+
+
+```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS-B test falsely predicted a trend when there was none in 5.5\\% of cases (white), whereas this was true in more than 23\\% of Mann-Kendall simulations (red).\\label{Fig3}' }
+
+label <- function(variable,value){
+  return(facet_names[value])
+}
+
+
+summary_func <- function(df, full_proc = T, type){
+  agg <- df %>% group_by(`timeseries length`, `Trend strength`, `AR strength`,
+                              method) %>%  
+    filter(`timeseries length` != 10) %>%
+    dplyr::summarise(median = median(Value),
+       mean = mean(Value),
+       sd = sd(Value),
+       n = n(),
+       prop = length(Value[Value < 0.05])/n()) 
+  
+  if (full_proc & type == 2){
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` != 'no trend') %>%
+      dplyr::summarise(mean = mean(prop))
+    return(agg)
+  } else if (full_proc & type == 1){
+    agg <- agg %>% group_by(`timeseries length`, method) %>%
+      filter(`Trend strength` == 'no trend') %>%
+    dplyr::summarise(mean = mean(prop))
+    return(agg)
+  }
+    return(agg)
+  }
+ 
+
+false_pos_mat <- summary_func(p_results, type = 1)
+false_rej_mat <- summary_func(p_results, type = 2)
+
+#--------Confusion matrices - One per test----------#
+
+#We want the percentage of true positives, false positives, true negatives, and false negatives
+
+conf_mat <- function(df, test, ar = NULL){
+  df <- df %>% filter(`timeseries length` == 30)
+  if (!is.null(ar)){
+    ar <- ar
+  } else{
+    ar <- "AR"
+  }
+  #True positives
+  true_pos_frac <- nrow(df[df$`Trend strength` != "no trend" &
+                          df$Value <= 0.05 &
+                          df$method == test &
+                            grepl(ar,df$`AR strength`),])
+  true_pos_tot <- nrow(df[df$`Trend strength` != "no trend" &
+                            df$method == test&
+                            grepl(ar,df$`AR strength`),])
+  
+  true_pos_freq <- true_pos_frac/true_pos_tot 
+  
+  #False positives
+ 
+  false_pos_frac <- nrow(df[df$`Trend strength` == "no trend" &
+                        df$Value <= 0.05 &
+                        df$method == test&
+                          grepl(ar,df$`AR strength`),])
+  false_pos_tot <- nrow(df[df$`Trend strength` == "no trend" &
+                             df$method == test&
+                             grepl(ar,df$`AR strength`),])
+  
+  false_pos_freq <- false_pos_frac/false_pos_tot
+  
+  #False negatives
+
+  false_neg_frac <- nrow(df[df$`Trend strength` != "no trend" &
+                         df$Value >= 0.05 &
+                         df$method == test&
+                           grepl(ar,df$`AR strength`),])
+  false_neg_tot <- nrow(df[df$`Trend strength` != "no trend "&
+                             df$method == test&
+                             grepl(ar,df$`AR strength`),])
+  
+  false_neg_freq <- false_neg_frac/false_neg_tot
+  
+  #true
+  
+  true_neg_frac <- nrow(df[df$`Trend strength` == "no trend" &
+                         df$Value >= 0.05 &
+                         df$method == test&
+                           grepl(ar,df$`AR strength`),])
+  true_neg_tot <- nrow(df[df$`Trend strength` == "no trend" &
+                            df$method == test&
+                            grepl(ar,df$`AR strength`),])
+  
+  true_neg_freq <- true_neg_frac/true_neg_tot
+
+  
+  conf_mat <- data.frame(x = c("actual no","actual yes","actual no","actual yes"),
+                         y = c('predicted no','predicted yes','predicted yes','predicted no'),
+                         val = c(round(true_neg_freq,3), round(true_pos_freq,3),
+                                 round(false_pos_freq,3),round(false_neg_freq,3)))
+  
+  return(conf_mat)
+}
+
+mk <- cbind(conf_mat(p_results,test = "mk"), test = rep('mk',4))
+pw <- cbind(conf_mat(p_results, test = "pw"), test = rep('pw',4))
+gls <- cbind(conf_mat(p_results, test = "gls"), test = rep('gls',4))
+fin <- rbind(mk, pw, gls)
+fin$group <- factor(paste(fin$x,fin$y))
+
+
+#Make matrices for white = good and orange = bad
+fin_dif <- fin %>% group_by(group) %>%
+  mutate(val, best_dif = ifelse(group == "actual no predicted no"|
+                                  group == "actual yes predicted yes", (abs(max(val) - val)), #best_dif is for assigning colors
+                                (abs(min(val) - val)))) 
+
+#For custom facet titles
+facet_names <- list(
+  'mk'="Mann-Kendall",
+  'pw'="MK-TFPW",
+  'gls'="GLS"
+)
+
+pal <- colorRampPalette(c("white","darkred")) #color palette
+
+#plot
+ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
+  facet_grid(. ~ test, labeller = label)+
+  geom_tile(aes(size = 1),color = "grey", size = 1)  +
+  scale_fill_gradientn(colors = pal(10))+
+  geom_text(aes(x = x, y = y, label = round(val,3), size = 1),size = 4) +
+  theme(legend.position = "none",
+        axis.line = element_blank(),
+        axis.title=element_blank(),
+        axis.text.y = element_text(margin = margin(t = 0, r = -6,
+                                                   b = 0, l = 0),
+                                   size = 8),
+        axis.text.x = element_text(margin = margin(t = -3, r = 0,
+                                                   b = 150, l = 0),
+                                   size = 8),
+        axis.ticks.y=element_blank(),
+        axis.ticks.x=element_blank(),
+        plot.title = element_text(hjust = -0.1),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.border = element_blank(),
+        panel.background = element_blank())
+```
+
+```{r MCCR, echo = F, fig.align='center',fig.width = 8, fig.height= 3.25, fig.cap="The effect of autocorrelation and series length on Matthews Correlation Coefficient; a "}
+#Matthew correlation coefficient
+p_resultsm <- p_results %>% mutate(`Trend strength`,
+                                   actual = plyr::mapvalues(`Trend strength`,
+                                                            from = c("strong trend","medium trend",
+                                                                     "weak trend", "no trend"),
+  to = c(1,1,1,0))) %>%
+  mutate(predict = ifelse(Value < 0.05,1,0 )) %>%
+  filter(!is.na(Value))
+
+mk <- p_resultsm[p_resultsm$method == 'mk',]
+pw <- p_resultsm[p_resultsm$method == 'pw',]
+gls <- p_resultsm[p_resultsm$method == 'gls',]
+
+
+#plotting MCCR across AR strengths
+df <- p_resultsm
+mccr_ar <- function(df,ar,time = NULL){
+  if(!is.null(time)){
+    z <- df[df$`timeseries length` == time,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr)) 
+  } else {
+    z <- df[df$`AR strength` == ar,]
+    z_mccr <- mccr(z$actual, z$predict)
+    return(as.numeric(z_mccr))  
+  }
+ 
+}
+
+mcc_mk <- data.frame(mcc = c(mccr_ar(mk, "no AR"),mccr_ar(mk, "medium AR"),mccr_ar(mk, "strong AR")),
+                var = c("no AR","med. AR AR","strong AR"),
+                Test = "Mann-Kendall",
+                id = "AR Strength")
+mcc_pw <- data.frame(mcc = c(mccr_ar(pw, "no AR"),mccr_ar(pw, "medium AR"),mccr_ar(pw, "strong AR")),
+                var = c("no AR","med. AR","strong AR"),
+                Test = "MK-TFPW",
+                id = "AR Strength")
+mcc_gls <- data.frame(mcc = c(mccr_ar(gls, "no AR"),mccr_ar(gls, "medium AR"),mccr_ar(gls, "strong AR")),
+                 var = c("no AR","med. AR","strong AR"),
+                 Test = "GLS",
+                 id = "AR Strength")
+
+mcc.ar <- rbind(mcc_mk, mcc_pw, mcc_gls)
+
+ar <- ggplot(data = mcc.ar, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c("no AR","med. AR","strong AR"))+
+  labs(x = "Autocorrelation strength",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=11,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain"),
+        legend.position = "none")
+
+#MCCR across time series lengths
+
+mcc_mk_time <- data.frame(mcc = c(mccr_ar(mk, time = 10),mccr_ar(mk, time = 20),mccr_ar(mk, time = 30)),
+                     var = c(10,20,30),
+                     Test = "Mann-Kendall",
+                     id = "Series Length")
+mcc_pw_time <- data.frame(mcc = c(mccr_ar(pw, time = 10),mccr_ar(pw, time = 20),mccr_ar(pw, time = 30)),
+                          var = c(10,20,30),
+                     Test = "MK-TFPW",
+                     id = "Series Length")
+mcc_gls_time <- data.frame(mcc = c(mccr_ar(gls, time = 10),mccr_ar(gls, time = 20),mccr_ar(gls, time = 30)),
+                           var = c(10,20,30),
+                      Test = "GLS",
+                      id = "Series Length")
+
+mcc.time <- rbind(mcc_mk_time, mcc_pw_time, mcc_gls_time)
+
+
+time <- ggplot(data = mcc.time, aes(x = var, y = mcc, group = Test))+
+  geom_line(aes(color = Test), size = 1.1) +
+  geom_point(aes(color = Test), size = 1.5) +
+  scale_x_discrete(limits=c(10,20,30))+
+  labs(x = "Series length",
+       y = "MCC") +
+  theme(axis.text = element_text(colour="grey20",size=13,hjust=.5,vjust=.5,face="plain"),
+        axis.title.x = element_text(colour="grey20",size=17,angle=0,vjust=-1,face="plain"),
+        axis.title.y = element_text(colour="grey20",size=17,face="plain")) +
+  xlim(5,35)
+
+plot_grid(ar, time, align = "h", rel_widths = c(1, 1.51), labels = c("A","B"),
+          label_x = c(0.225,0.15),label_fontface = 'plain')
+```
+
+##Discussion
+Ecosystem reporting is vital to the development of Integrated Ecosystem Assessments (IEA), which lay out the framework for moving toward Ecosystem-Based Fishery Management (EBFM)[@Levin2009a]. The key analytical foundations to all IEA products revolve around the concept of indicator change; whether in the short or long-term, although oftentimes managers are most interested in short-term, abrupt changes to indicator status [@Wagner2013]. Here we addressed the shortcomings of assigning significant trends to indicator time series given the common problems of small sample size and autocorrelation. Our results show that commonly used statistical methods used to detect trend in the presence of autocorrelated residuals fail when assessing data with small sample size. 
+
+In the Northeast US, most indicators considered in the ecosystem assessment process are annual data typically ranging between 10-60 years in length. In the context of hydrological literature, the upper limit of time series lengths seen in our indicator data sets would be considered short [@Bayazit2015], and although it may be tempting to say otherwise, our work here highlights the dangers of assigning trends to short time series even while attempting to address problems of autocorrelation. The influence of autocorrelation in short series inevitably increases Type II error rates, or the failure to identify trend when it exists. This was especially true under scenarios of strong autocorrelation, which effectively masked the detection of trend unless trend was strong and N was large. An increase in Type I error, or the false rejection of the null hypothesis, was also seen, although results suggest that the GLS bootstrap approach was successful in reducing Type I error to acceptable levels under strong autocorrelation (0.05). All other tests showed high Type I error under strong autocorrelation.
+
+As discussed by @Bayazit2015, the societal cost of Type II error (i.e. under-preparedness) may exceed that of Type I error (over-preparedness).*linking statement* Implementing the GLS-B approach as shown in this work would greatly reduce the likelihood of practicioners committing Type I error in assigning significance to trends that do not exist. However, simply because a signficant trend does not exist does not necessarily mean that nothing of biological importance is occurring. A surge in autocorrelated observations may be indicative of a "status" change occurring in the near-term; knowledge of which provides benefits to managers. Given the complexities and shortcomings of assigning significant trend, a way forward could be to move away from assigning significance to indicator time series altogether. @Nicholls2001a suggests that confidence intervals for trend effect size would suffice as alternatives to assigning signficance. In this case, if the confidence interval were to contain $\beta = 0$, then the null hypothesis of no trend would be accepted. 
+
+Our work also focused on the capacity of tests to detect weak, but empirically not uncommon, trend strengths in simulated time series. We found that under the limitations imposed by series lengths $\leq$ 30, no test was effective in detecting weak trends. This result supports the work of others [e.g. Wagner2013] suggesting that small changes in trend (<1% change in our case) are difficult to detect in time series regardless of autocorrelation strength for small samples sizes. The scenario of weak trend may also benefit from moving away from the binary outcomes of a significant or non-significant result, and away from the frequentist alternative outlined by @Nicholls2001a.
+
+@Wagner2013 suggest the use of Bayesian inference frameworks, which provide a more flexible approach to trend analysis than the binary outcomes of hypothesis testing. Specifically, their work cites Dynamic Linear Models (DLM) as a possible way forward for indicators with small samples size. A DLM approach allows for model coefficients (e.g. slope) to change with time while providing probabilities of rate changes. This approach introduces greater complexity into the common "up or down" model subscribed to by current ecosystem status reports. However, given the results of this study, we suggest that the current pathway for indicator trend analyses is likely insufficient for small samples.
+
+The simulations revealed that no statistical approach excelled under all conditions of series length, trend, and autocorrelation strength. However, results indicate that relying on the GLS bootstrap method may prevent the incidence of Type I error above the 0.05 level regardless of autocorrelation strength, an outcome not captured by any other test for trend. Deriving trends from oftentimes disparate ecosystem indicators is challenging in part due to the goal of applying a single statistical approach to time series with a wide range of series lengths and error structures. The complexity of the chosen method must be balanced with its applicability to a wide range of indicators, and also with the interpretability of its results. 
+<!--
+Although we focused solely on trend detection in indicator time series, our results imply that the limitations inherent within short time series be taken into account during the indicator selection stage. 
+--> 
+ 
+
+
+
+```{r decile coverage simulations, echo = F, eval = F}
+
+#placeholders for results
+gls.ts.NOAR.notrend <- NULL
+gls.ts.NOAR.ltrendweak <- NULL
+gls.ts.NOAR.ltrendmed <- NULL
+gls.ts.NOAR.ltrendstrong <- NULL
+
+gls.ts.medAR.notrend <- NULL
+gls.ts.medAR.ltrendweak <- NULL
+gls.ts.medAR.ltrendmed <- NULL
+gls.ts.medAR.ltrendstrong <- NULL
+
+gls.ts.strongAR.notrend <- NULL
+gls.ts.strongAR.ltrendweak <- NULL
+gls.ts.strongAR.ltrendmed <- NULL
+gls.ts.strongAR.ltrendstrong <- NULL
+
+sim_results_10 <- NULL
+sim_results_20 <- NULL
+sim_results_30 <- NULL
+
+
+if (run){
+  ptm <- proc.time()
+  #Specify time series length
+  for (m in c(10,20,30)){
+  
+  notrend <- rep(0,m)
+  ltrendweak <- -0.262 + (0.004 * c(1:m)) 
+  ltrendmed <- -0.262 + (0.051 * c(1:m)) 
+  ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
+  print(paste("m=",m))
+
+    #Trend strength
+    for (k in c("notrend","ltrendweak","ltrendmed","ltrendstrong")){
+    
+    #AR strength
+    for (j in c("strongAR","medAR","NOAR")){
+    
+      true_trend <- get(k)
+      
+      for (i in 1:nsims){
+        
+        #generate simulations
+        dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = ARsd)
+        
+        #add autocorrelated error structure to trend
+        dat <- get(k) + dat
+        dat <- data.frame(series = dat,
+                          time = 1:length(dat))
+        
+        #---------------------------------GLS---------------------------------#
+        gls_sim <- tryCatch({
+          newtime <- seq(1, m, 1)
+          newdata <- data.frame(time = newtime,
+                                time2 = newtime^2)
+          
+          #Correctly specifies model when no AR error in simulated time series
+          if (j == "NOAR"){
+            gls_sim <- fit_lm(dat = dat, ar = get(j),
+                              ARsd = ARsd, m = m, trend = get(k), spec = TRUE)
+          } else{
+            gls_sim <- fit_lm(dat = dat, ar = get(j), ARsd = ARsd, m = m, trend = get(k))
+            
+          }
+          
+        }, 
+        error = function(e) {
+          gls_sim <- "error"
+        })
+        
+        
+        #---------------------------------Decile coverage---------------------------------#
+        if (is.na(gls_sim[1]) | gls_sim[1] == "error"){
+          
+          gls_pred <- data.frame(fit = rep(NA, m))
+          decile_of_true <- rep(NA, m)
+        } else {
+          gls_pred <- AICcmodavg::predictSE(gls_sim$model,
+                                            newdata = newdata,
+                                            se.fit = TRUE)
+          decile_of_true <- ceiling(10 * pnorm(q    = true_trend, 
+                                           mean = gls_pred$fit, 
+                                           sd   = gls_pred$se.fit))
+        }
+        
+        
+
+        
+        for (g in 1:m){
+          if (is.na(gls_pred$fit[1])){
+            print("NA")
+            assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),NA))
+          } else {
+            assign(paste0("gls.ts.",j,".",k),rbind(get(paste0("gls.ts.",j,".",k)),decile_of_true[g]))
+          }
+          
+        }
+          
+        
+      } 
+      
+    }
+  }
+  sim_results = data.frame(gls.NOAR.ltrendweak = gls.ts.NOAR.ltrendweak,
+                           gls.NOAR.ltrendmed = gls.ts.NOAR.ltrendmed,
+                           gls.NOAR.ltrendstrong = gls.ts.NOAR.ltrendstrong,
+                           gls.NOAR.notrend = gls.ts.NOAR.notrend,
+
+                           gls.medAR.ltrendweak = gls.ts.medAR.ltrendweak,
+                           gls.medAR.ltrendmed = gls.ts.medAR.ltrendmed,
+                           gls.medAR.ltrendstrong = gls.ts.medAR.ltrendstrong,
+                           gls.medAR.notrend = gls.ts.medAR.notrend,
+
+                           gls.strongAR.ltrendweak = gls.ts.strongAR.ltrendweak,
+                           gls.strongAR.ltrendmed = gls.ts.strongAR.ltrendmed,
+                           gls.strongAR.ltrendstrong = gls.ts.strongAR.ltrendstrong,
+                           gls.strongAR.notrend = gls.ts.strongAR.notrend)
+
+    assign(paste0('sim_results_',m), rbind(get(paste0('sim_results_',m)),sim_results))
+    #write.csv(sim_results, file = paste0("decile_coverage_results_",m,Sys.Date(),".csv"))
+    
+    gls.ts.NOAR.notrend <- NULL
+    gls.ts.NOAR.ltrendweak <- NULL
+    gls.ts.NOAR.ltrendmed <- NULL
+    gls.ts.NOAR.ltrendstrong <- NULL
+    
+    gls.ts.medAR.notrend <- NULL
+    gls.ts.medAR.ltrendweak <- NULL
+    gls.ts.medAR.ltrendmed <- NULL
+    gls.ts.medAR.ltrendstrong <- NULL
+    
+    gls.ts.strongAR.notrend <- NULL
+    gls.ts.strongAR.ltrendweak <- NULL
+    gls.ts.strongAR.ltrendmed <- NULL
+    gls.ts.strongAR.ltrendstrong <- NULL
+    print(proc.time() - ptm)
+}
+
+coverage_10 <- sim_results_10  
+coverage_20 <- sim_results_20  
+coverage_30 <- sim_results_30  
+  
+write.csv(sim_results_10, file = paste0(data.dir,"coverage_10","_",date,".csv"))
+write.csv(sim_results_20, file = paste0(data.dir,"coverage_20","_",date,".csv"))
+write.csv(sim_results_30, file = paste0(data.dir,"coverage_30","_",date,".csv"))
+  
+} else if (!run){
+
+  coverage_10 <- read.csv(file = paste0(data.dir,"coverage_10","_",date,".csv"))
+  coverage_20 <- read.csv(file = paste0(data.dir,"coverage_20","_",date,".csv"))
+  coverage_30 <- read.csv(file = paste0(data.dir,"coverage_30","_",date,".csv"))
+}
+
+
+```
+
+```{r decile coverage plots, echo = F, fig.align='center', eval = F}
+
+#---------------------------Process data--------------------------#
+sim_30 <- tidyr::gather(coverage_30, var, value, gls.NOAR.ltrendweak:gls.strongAR.notrend, factor_key=TRUE)
+sim_30$`Series length` <- "30"
+sim_20 <- tidyr::gather(coverage_20, var, value, gls.NOAR.ltrendweak:gls.strongAR.notrend, factor_key=TRUE)
+sim_20$`Series length` <- "20"
+sim_10 <- tidyr::gather(coverage_10, var, value, gls.NOAR.ltrendweak:gls.strongAR.notrend, factor_key=TRUE)
+sim_10$`Series length` <- "10"
+sims <- rbind(sim_10, sim_20, sim_30)
+
+sim_table <- sims %>% group_by(`Series length`, var,value)  %>%
+  filter(value != 0) %>%
+  tally() %>%
+  group_by(`Series length`) %>% mutate(n = n/(as.numeric(`Series length`)*nsims))#freq. table
+
+
+#------------------Split out columns for grouping----------------#
+col <- do.call(rbind.data.frame, str_split(sim_table$var, '[.]'))
+names(col) <- c("Test","AR","Trend Strength")
+sim_table$Test <- col$Test
+sim_table$AR <- col$AR
+sim_table$Trend.Strength <- col$`Trend Strength`
+
+#Set factor levels for ordering facet_grid()
+sim_table$Trend.Strength = factor(sim_table$Trend.Strength, levels=c('ltrendstrong','ltrendmed','ltrendweak','notrend'))
+
+sim_table$AR = factor(sim_table$AR, levels=c('NOAR','medAR','strongAR'))
+
+#------------------Make figure---------------------#
+
+ar_names <- c(`NOAR` = "No AR (phi = 0)",
+                    `medAR` = "Med. AR (phi = 0.433)",
+                    `strongAR` = "Strong AR (phi = 0.8)")
+
+trend_names <- c(`ltrendstrong`="Strong trend",
+                 `ltrendweak` = "Weak trend",
+                 `notrend` = "No trend",
+                 `ltrendmed` = "Med. trend")
+#... + facet_grid(hospital ~ ., labeller = as_labeller(hospital_names))
+
+ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
+  geom_bar(aes(fill = `Series length`),stat = "identity", position = "dodge", color = "steelblue",
+           size = 0.1) +
+  ylab("Fraction of Total Observations in Decile") +
+  xlab("Decile") +
+  scale_x_discrete(limits = c(1:10)) +
+  facet_grid(Trend.Strength ~ AR,  labeller = labeller(Trend.Strength = as_labeller(trend_names),
+                                                AR = as_labeller(ar_names))) +
+  theme_bw()
+
+```
+
+
+
+##References
