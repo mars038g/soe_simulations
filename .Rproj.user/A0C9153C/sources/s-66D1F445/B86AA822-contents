@@ -1,0 +1,425 @@
+library(dplyr)
+library(nlme)
+library(MuMIn)
+library(data.table)
+## Function to choose best linear model -------------------
+fit_lm <- function(dat) {
+  # Remove missing values first so that all models
+  # use the same number of observations (important for AIC)
+  dat <- dat %>% dplyr::filter(complete.cases(.))
+  
+  # Constant model (null model used to calculate 
+  # overall p-value)
+  constant_norm <-
+    nlme::gls(series ~ 1, 
+              data = dat)
+  
+  constant_ar1 <-
+    try(nlme::gls(series ~ 1,
+              data = dat,
+              correlation = nlme::corAR1(form = ~time)))
+  if (class(constant_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA))
+                                 
+  } 
+  
+  
+  
+  # Linear model with normal error
+  linear_norm <- 
+    nlme::gls(series ~ time, 
+              data = dat)
+  
+  # Linear model with AR1 error
+  linear_ar1 <- 
+    try(nlme::gls(series ~ time, 
+              data = dat,
+              correlation = nlme::corAR1(form = ~time)))
+  if (class(linear_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA))
+    
+  }
+  
+  # Polynomial model with normal error
+  dat$time2 <- dat$time^2
+  poly_norm <- 
+    nlme::gls(series ~ time + time2, 
+              data = dat)
+  
+  # Polynomial model with AR1 error
+  poly_ar1 <- 
+    try(nlme::gls(series ~ time + time2, 
+              data = dat,
+              correlation = nlme::corAR1(form = ~time)))
+  if (class(poly_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA))
+    
+  }
+  
+  # Calculate AICs for all models
+  df_aicc <-
+    data.frame(model = c("poly_norm",
+                         "poly_ar1",
+                         "linear_norm",
+                         "linear_ar1"),
+               aicc  = c(AICc(poly_norm),
+                         AICc(poly_ar1),
+                         AICc(linear_norm),
+                         AICc(linear_ar1)),
+               coefs = rbind(coef(poly_norm),
+                             coef(poly_ar1),
+                             c(coef(linear_norm), NA),
+                             c(coef(linear_ar1),  NA)),
+               # Calculate overall signifiance (need to use
+               # ML not REML for this)
+               pval = c(anova(update(constant_norm, method = "ML"),
+                              update(poly_norm, method = "ML"))$`p-value`[2],
+                        anova(update(constant_ar1, method = "ML"),
+                              update(poly_ar1, method = "ML"))$`p-value`[2],
+                        anova(update(constant_norm, method = "ML"),
+                              update(linear_norm, method = "ML"))$`p-value`[2],
+                        anova(update(constant_ar1, method = "ML"),
+                              update(linear_ar1, method = "ML"))$`p-value`[2]))
+  
+  best_lm <-
+    df_aicc %>%
+    dplyr::filter(aicc == min(aicc))
+  
+  
+  if (best_lm$model == "poly_norm") {
+    model <- poly_norm
+  } else if (best_lm$model == "poly_ar1") {
+    model <- poly_ar1
+  } else if (best_lm$model == "linear_norm") {
+    model <- linear_norm
+  } else if (best_lm$model == "linear_ar1") {
+    model <- linear_ar1
+  }
+  
+  return(list(best_lm = best_lm, 
+              model = model))
+}
+
+## Function to choose best GAM ----------------------------
+fit_gam <- function(dat) {
+    
+  # Remove missing values first so that all models
+  # use the same number of observations (important for AIC)
+  dat <- dat %>% dplyr::filter(complete.cases(.))
+  
+  # Break out if less than 30 data points (GAMM runs into 
+  # numerical problems)
+  if (nrow(dat) < 30) {
+    best_gam <- 
+      data.frame(model = NA,
+                 aicc  = NA,
+                 coefs = NA,
+                 pval  = NA) 
+    return(best_gam)
+  }
+  
+  # GAM with normal error
+  gam_norm <- 
+    mgcv::gam(series ~ s(time), 
+              data = dat)
+  
+  # GAM with AR1 error
+  gam_ar1 <- 
+    mgcv::gamm(series ~ s(time), 
+               data = dat,
+               correlation = corAR1(form = ~time))
+  
+  # Calculate AICs for all models
+  df_aicc <- 
+    data.frame(model = c("gam_norm",
+                         "gam_ar1"),
+               aicc  = c(AICc(gam_norm),
+                         AICc(gam_ar1)),
+               coefs = rbind(coef(gam_norm),
+                             coef(gam_ar1$gam)),
+               pval  = c(summary(gam_norm)$s.table[, "p-value"],
+                         summary(gam_ar1$gam)$s.table[, "p-value"]))
+  
+  best_gam <-
+    df_aicc %>%
+    dplyr::filter(aicc == min(aicc))
+  
+  
+  return(best_gam)
+}
+
+
+### Monte Carlo simulation function - Should have the option to include a second term when generating simulated data. 
+
+## Should be a step by step process in the app
+
+
+#wide to long function 
+w2l <- function(x, by, by.name = 'Time', value.name = 'Value'){
+  x.new <- copy(x)
+  var.names <- names(x)[which(names(x) != by)]
+  out <- c()
+  setnames(x.new, by, 'by')
+  for(i in 1:length(var.names)){
+    setnames(x.new, var.names[i], 'V1')
+    single.var <- x.new[, list(by, V1)]
+    single.var[, Var := var.names[i]]
+    out <- rbindlist(list(out, single.var))
+    setnames(x.new, 'V1', var.names[i])
+  }
+  setnames(x.new, 'by', by)
+  setnames(out, c('by', 'V1'), c(by.name, value.name))
+}
+
+
+mc_sim <- function(order, len, nsim, ARvect, ARsd = 0.54^0.5){
+  
+  ARlist <- list(sort(ARvect))
+  ARmedium <- list(ar = min(ARlist[[1]]))
+  ARstrong <- list(ar = max(ARlist[[1]]))
+  NOAR <- list()
+  
+  #Adding placeholders for simulated data
+  LINEARweak_ARmedium <- NULL 
+  LINEARweak_ARstrong <- NULL 
+  LINEARmedium_ARmedium <- NULL 
+  LINEARmedium_ARstrong <- NULL
+  LINEARstrong_ARmedium <- NULL 
+  LINEARstrong_ARstrong <- NULL 
+  
+  NOTREND_ARmedium <- NULL
+  NOTREND_ARstrong <- NULL
+  NOTREND_NOAR <- NULL
+  
+  LINEARweak_NOAR <- NULL
+  LINEARmedium_NOAR <- NULL
+  LINEARstrong_NOAR <- NULL
+  
+  NOTREND_ARmedium_RESULTS <- NULL
+  NOTREND_NOAR_RESULTS <- NULL
+  NOTREND_ARstrong_RESULTS <- NULL
+  LINEARweak_ARmedium_RESULTS <- NULL
+  LINEARweak_ARstrong_RESULTS <- NULL
+  LINEARmedium_ARmedium_RESULTS <- NULL
+  LINEARmedium_ARstrong_RESULTS <- NULL
+  LINEARstrong_ARmedium_RESULTS <- NULL
+  LINEARstrong_ARstrong_RESULTS <- NULL
+  LINEARweak_NOAR_RESULTS <- NULL
+  LINEARmedium_NOAR_RESULTS <- NULL
+  LINEARstrong_NOAR_RESULTS <- NULL
+  
+  #initializing simulations
+  for (i in 1:nsim) {
+    #Generating ar(1) simulations
+    for (k in c('ARmedium','ARstrong','NOAR')){
+      # Simulate arima process with sd set to the mean sd
+      # of the residuals
+      x = len
+      TEMP1 <- arima.sim(get(k), n=x, rand.gen=rnorm, sd = ARsd)
+      
+      if (order == 1){
+        LTRENDweak   <- -0.262 + (0.004 * c(1:x)) #Linear trend
+        LTRENDmedium <- -0.262 + (0.051 * c(1:x)) 
+        LTRENDstrong <- -0.262 + (0.147 * c(1:x))
+        
+        LTEMP1 <- TEMP1 + LTRENDweak
+        LTEMP2 <- TEMP1 + LTRENDmedium
+        LTEMP3 <- TEMP1 + LTRENDstrong
+        assign(paste0('LINEARweak_',k,sep=""),rbind(get(paste0('LINEARweak_',k,sep="")),LTEMP1))
+        assign(paste0('LINEARmedium_',k,sep=""),rbind(get(paste0('LINEARmedium_',k,sep="")),LTEMP2))
+        assign(paste0('LINEARstrong_',k,sep=""),rbind(get(paste0('LINEARstrong_',k,sep="")),LTEMP3))
+        assign(paste0('NOTREND_',k, sep=""),rbind(get(paste0('NOTREND_',k, sep="")), TEMP1))
+        
+        for (y in c('TEMP1','LTEMP1','LTEMP2','LTEMP3')){
+
+          TEMP_TEST1 <- zyp.trend.vector(get(y),method='yuepilon')
+          TEMP_P1 <- unlist(TEMP_TEST1[6])
+          T_1 <- TEMP_P1
+
+          TEMP_TEST12 <- MannKendall(get(y))
+          T_2 <- as.double(unlist(TEMP_TEST12[2]))
+          TEMP_lm <- fit_lm(dat = data.frame(series = get(y) %>% as.numeric,
+                                             time = 1:length(get(y))))
+          T_lm <- TEMP_lm$best_lm$pval
+       
+
+
+          for (j in c(10,20)) {
+            #Testind 20 & 10 year series with prewhitening Mann-Kendall technique
+            if ((length(get(y)) >= j) & (j == 10)){
+              #pw
+              TEMP_TEST2 <- zyp.trend.vector(get(y)[1:j],method='yuepilon')
+
+              TEMP_P2 <- unlist(TEMP_TEST2[6])
+              T_1 <- cbind(T_1,TEMP_P2)
+              #Now standard Mann_Kendall
+              TEMP_TEST22 <- MannKendall(get(y)[1:j])
+              TEMP_P22 <- as.double(unlist(TEMP_TEST22[2]))
+              T_2 <- cbind(T_2,TEMP_P22)
+              # 20-year and 10-year linear model
+              TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[1:j] %>% as.numeric,
+                                                 time = 1:length(get(y)[1:j])))
+              T_lm <- cbind(T_lm, TEMP_lm$best_lm$pval)
+
+            } else if ((length(get(y)) >= j) & (j == 20)){
+              #pw
+             
+              TEMP_TEST2 <- zyp.trend.vector(get(y)[1:j],method='yuepilon')
+              TEMP_P2 <- unlist(TEMP_TEST2[6])
+              T_1 <- cbind(T_1,TEMP_P2)
+              #Now standard Mann_Kendall
+              TEMP_TEST22 <- MannKendall(get(y)[1:j])
+              TEMP_P22 <- as.double(unlist(TEMP_TEST22[2]))
+              T_2 <- cbind(T_2,TEMP_P22)
+              # 20-year and 10-year linear model
+              TEMP_lm <- fit_lm(dat = data.frame(series = get(y)[1:j] %>% as.numeric,
+                                                 time = 1:length(get(y)[1:j])))
+              T_lm <- cbind(T_lm, TEMP_lm$best_lm$pval)
+
+            } else if (length(get(y)) < j){
+              print('Increase time series length')
+            }
+          }
+          
+    
+          colnames(T_1) <- c(paste0('p_',x,'_pw'),'p_10_pw','p_20_pw')
+          colnames(T_2) <- c(paste0('p_',x,'_mk'),'p_10_mk','p_20_mk')
+          colnames(T_lm) <- c(paste0('p_',x,'_gls'),'p_10_gls','p_20_gls')
+          
+          if (y=='TEMP1' & k!='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
+                                              rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
+                                                    cbind(T_1,T_2, T_lm)))
+          } else if (y=='TEMP1' & k=='NOAR') {assign(paste0('NOTREND_',k,'_RESULTS',sep=""),
+                                                     rbind(get(paste0('NOTREND_',k,'_RESULTS',sep="")),
+                                                           cbind(T_1,T_2, T_lm)))
+          } else if (y=='LTEMP1') {assign(paste0('LINEARweak_',k,'_RESULTS',sep=""),
+                                          rbind(get(paste0('LINEARweak_',k,'_RESULTS',sep="")),
+                                                cbind(T_1,T_2, T_lm)))
+          } else if (y=='LTEMP2') {assign(paste0('LINEARmedium_',k,'_RESULTS',sep=""),
+                                          rbind(get(paste0('LINEARmedium_',k,'_RESULTS',sep="")),
+                                                cbind(T_1,T_2, T_lm)))
+          } else if (y=='LTEMP3') {assign(paste0('LINEARstrong_',k,'_RESULTS',sep=""),
+                                          rbind(get(paste0('LINEARstrong_',k,'_RESULTS',sep="")),
+                                                cbind(T_1,T_2, T_lm)))
+          }
+        }
+      }
+        
+    }
+  }
+      #rm(TEMP1,LTEMP1,QTEMP1)
+
+  results <- c("NOTREND_ARmedium_RESULTS", "NOTREND_NOAR_RESULTS", "NOTREND_ARstrong_RESULTS",
+               "LINEARweak_ARmedium_RESULTS", "LINEARweak_ARstrong_RESULTS",
+               "LINEARmedium_ARmedium_RESULTS","LINEARmedium_ARstrong_RESULTS",
+               "LINEARstrong_ARmedium_RESULTS", "LINEARstrong_ARstrong_RESULTS",
+               "LINEARweak_NOAR_RESULTS","LINEARmedium_NOAR_RESULTS","LINEARstrong_NOAR_RESULTS")
+  #filter for p values
+  p_result_mat <- list()
+  for (i in 1:length(results)){
+    z <- get(results[i])
+    z <- cbind(z[,grepl("p_",colnames(get(results[i]))) == TRUE],seq(1,nrow(z),1))
+    z <- data.table(z)
+    z <- w2l(z, by = "V10", by.name = "replicate")
+    z <- cbind(z,rep(results[i],nrow(z)))
+    p_result_mat[[i]] <- z
+  }
+  #create final p dataframe
+  p_results <- 
+    do.call(rbind, p_result_mat) %>%
+    as.data.frame() %>%
+    tidyr::separate(Var, 
+                    c("var", "timeseries length", "method"),
+                    "_") %>%
+    tidyr::separate(V2, 
+                    c("Trend strength", "AR strength", "Results"),
+                    "_") %>%
+    dplyr::mutate(`Trend strength` = substring(`Trend strength`, first = 7),
+                  `Trend strength` = ifelse(`Trend strength` == "D",
+                                            "no",
+                                            `Trend strength`),
+                  `Trend strength` = paste0(`Trend strength`, " trend"),
+                  `AR strength` = substring(`AR strength`, first = 3),
+                  `AR strength` = ifelse(`AR strength` == "AR",
+                                         "no",
+                                         `AR strength`),
+                  `AR strength` = paste0(`AR strength`, " AR")) %>%
+    dplyr::select(-Results) %>%
+    tidyr::spread(method, Value) %>%
+    # remove runs that cause NAs in GLS (two runs out of 1000)
+    dplyr::filter(!is.na(gls)) %>%
+    tidyr::gather(method, Value, 
+                  -replicate, -var, 
+                  -`timeseries length`, -`Trend strength`,
+                  -`AR strength`) %>%
+    dplyr::mutate(`Trend strength` = factor(`Trend strength`, 
+                                            levels = c("strong trend",
+                                                       "medium trend",
+                                                       "weak trend",
+                                                       "no trend")),
+                  `AR strength` = factor(`AR strength`, 
+                                         levels = c("no AR",
+                                                    "medium AR",
+                                                    "strong AR")))
+  return(p_results)
+ }
+
+
+ 
+
+# ptm <- proc.time()
+# nsim <- c(5,10,20,40,100)
+# df <- data.frame(NULL)
+# for (i in 1:length(nsim)){
+#   test <- mc_sim(order = 1, len = 30, nsim = nsim[i], ARvect = c(.433,.8))
+#   test$ind <- i
+#   df <- rbind(df,test)
+#   print(i)
+# }
+# proc.time() - ptm
+
+#write.csv(df, file = "nsim_df.csv")
+# n simulations
+nsim_df = read.csv("nsim_df.csv")
+names(nsim_df) <- c("X","replicate","var","timeseries length","Trend strength","AR strength","method",
+               "Value","ind")
+
+sim_plotter <- function(df, nsim, ind){
+    ind = nsim
+    z = df[df$ind == ind,]
+    ggplot(z, aes(color = method, y = Value, 
+                          x = `timeseries length`)) +
+      geom_boxplot(outlier.size = 0.3, 
+                   outlier.alpha = 0.2) +
+      facet_grid(`Trend strength` ~ `AR strength`) +
+      ylab("p-value") +
+      theme_bw()
+}
+#sim_plotter(nsim_df, nsim = 1)
+
+# AR strength
+# ptm <- proc.time()
+# xlen <- seq(0.1,1,.1)
+# period_df <- data.frame(NULL)
+# for (i in 1:length(nsim)){
+#   test <- mc_sim(order = 1, len = xlen[i], nsim = 100, ARvect = c(.433,.8))
+#   test$ind <- i
+#   period_df <- rbind(period_df,test)
+#   print(i)
+# }
+# proc.time() - ptm

@@ -1,0 +1,52 @@
+
+
+newtime <- seq(1, m, 1)
+newdata <- data.frame(time = newtime,
+                      time2 = newtime^2)
+gls_sim <- AICcmodavg::predictSE(TEMP_lm$model, 
+                                 newdata = newdata,
+                                 se.fit = T)
+
+get_error <- function(test,  err_type, input){
+ if (test == "gls"){
+   gls_out <- tryCatch({
+     
+     mod <- input
+     newtime <- seq(1, m, 1)
+     newdata <- data.frame(time = newtime,
+                           time2 = newtime^2)
+     gls_sim <- AICcmodavg::predictSE(mod$model, 
+                                      newdata = newdata,
+                                      se.fit = T)
+     gls_pred <- gls_sim$fit
+     
+     if (err_type == "rmse"){
+       sqrt(mean((get(y)-gls_pred)^2))
+     } else if (err_type == "mae") {
+       mean(abs(get(y)-gls_pred))
+     }
+     
+   }, 
+   error = function(e) {
+     'error'
+   })
+   return(gls_out)
+   
+ } else if (test == "pw"){
+   mod <- input
+   pw_pred <- mod[[11]] + 1:length(TEMP1) * mod[[2]]
+   
+   if (err_type == "rmse"){
+     pw_out <- sqrt(mean((get(y)-pw_pred)^2))
+   } else if (err_type == "mae") {
+     pw_out <- mean(abs(get(y)-pw_pred))
+   }
+ }
+  return(pw_out)
+}
+
+get_error("pw","rmse", input = TEMP_TEST1)
+
+plot(gls_pred, ylim = c(0,10))
+points(get(y))
+points(pw_pred)

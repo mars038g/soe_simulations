@@ -1,0 +1,113 @@
+mainSimBootStudyNLME <- function() {
+  #set.seed((143))
+
+  #[.004,.051,.147] and phi = [0,0.433,0.8] with sigma = .735?
+  
+  # Parametric Bootstrap to assess the significance of trend in the presence of autocorrelation
+  # uses nlme::gls to do fitting by maximum likelihood.
+  # model = a + b.x + error
+  #                   error ~ AR(1)     - see simulateData function below
+
+  outFile <- "output.txt"
+  alpha <- 0
+  betaVec <- 0 #c(0.00,.004,.051,.147,.5)
+  rhoVec <- 0.8# c(0.00,.43,.8,.95)
+  sigma <- .735
+  nTVec <- 20# c(10,20,30,100)
+  nSims <- 100
+  nBootSims = 500
+  
+  vecHeader <- c("beta","rho","nT","sigma","pValueChi2","pvalueBoot")
+  write(vecHeader,file=outFile,ncolumns=length(vecHeader),append=TRUE)
+
+  for (beta in betaVec) {
+    for (rho in rhoVec) {
+      for (nT in nTVec) {
+        print(c(beta,rho,nT))
+        
+        # allocate memory to a bunch of vectors
+        LRstat <- vector(mode="numeric",length=nBootSims) # likelihood ratio statistic
+        pVal_boot <- vector(mode="numeric",length=nSims) # pvalue for bootstrap
+        pValChi2 <- vector(mode="numeric",length=nSims) # pvalue for chi sq
+        
+        # simulate nSims data sets
+        for (isim in 1:nSims) {
+          print(paste0("sample = ", isim," of ",nSims))
+          # simulate data using the current values of beta, rho, sigma, n in loop
+          # Sean - use your own simulation routine
+          data <- simulateData(alpha,beta=beta,sigma,rho,nT)
+          # fit under the null (beta = 0) and the alternative (estimate beta)
+          glsObjNull <- nlme::gls(y ~ 1,data=data, correlation = nlme::corAR1(form= ~x),method="ML")
+          glsObjAlt <- nlme::gls(y ~ x,data=data, correlation = nlme::corAR1(form= ~x),method="ML")
+
+          # likelihood ratio statistic
+          LRstat[1] <- -2*(glsObjNull$logLik- glsObjAlt$logLik)
+          # pvalue using chi quare approcimation
+          pValChi2[isim] <- 1-pchisq(LRstat[1],1) # uses distributional theory
+          
+          # these are estimates of a, sigma and rho under the null. We need these to do the bootstrap
+          alphaEst <- glsObjNull$coefficients[1]
+          sigmaEst <- glsObjNull$sigma
+          rhoEst <- coef(glsObjNull$modelStruct$corStruct,unconstrained=FALSE)
+
+          # bootstrapping. simulate and fit nBootSims samples
+          for (iboot in 2:nBootSims) {
+
+            # simulate under Null
+            # you already have your own simulation method, use that
+            # uses the parameter estimates above - fitting under the null
+            bootdata <- simulateData(alpha=alphaEst,beta=0,sigmaEst,rhoEst,nT)
+            # fit under null and alt
+            # i think you call y = series and x = time. You'll need to change that
+            # i also simulate with alpha (the intercept) = 0, i dont think you do. In that case you will remove the "-1" 
+            # from the calls to gls
+            glsObjBootNull <- nlme::gls(y ~ 1,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+            glsObjBootAlt <- nlme::gls(y ~ x,data=bootdata, correlation = nlme::corAR1(form= ~x),method="ML")
+            
+            # calculate and store the likelihood ratio statistic for each bootstrapped sample
+            LRstat[iboot] <- -2*(glsObjBootNull$logLik- glsObjBootAlt$logLik)
+          } # end bootstrap loop
+          
+          # now we can calculate the p-value based on the bootstrapping
+          pVal_boot[isim] <- sum(LRstat >= LRstat[1])/nBootSims
+          print(paste0("pval_chi = ",pValChi2[isim],". pval_boot = ",pVal_boot[isim]))
+          
+          
+        } # end sims loop
+        
+        # summarises the proportion of times the test rejects the null
+        pValue <- sum(pVal_boot <= 0.05)/nSims
+        pvChi <- sum(pValChi2 <= 0.05) /nSims
+        # writes to file
+        vec <- c(beta,rho,nT,sigma,pvChi,pValue)
+        write(vec,file=outFile,ncolumns=length(vec),append=TRUE)
+        
+       }
+    }
+  }
+  
+  
+
+  
+}
+
+
+
+
+
+simulateData <- function(alpha,beta=0,sigma,rho,nT){
+  # model->   y_t = a + b*t + z_t
+  # where z_t = rho* z_t-1 + e_t   (e_t ~ N(0,sigma^2))
+  xt <- c(1:nT)
+  # simulate AR - error process
+  zt <- vector(mode = "numeric",length=nT)
+  zt[1] <- rnorm(1,mean=0,sd=sqrt((sigma^2)/(1-rho^2)))
+  for (it in 2:nT) {
+    zt[it] <- rho*zt[it-1]+rnorm(1,0,sigma)
+  }
+  
+  # simulate y
+  yt <- alpha + xt*beta + zt
+  data <- data.frame(x=xt,y=yt)
+  return(data)
+}

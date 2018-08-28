@@ -1,0 +1,143 @@
+
+library(data.table);library(dplyr);library(tidyr)
+setwd("c:/users/sean.hardison/desktop/simulations/sim_scripts_and_data")
+#n = 10
+sim_10 <- read.csv('mae_results_10_4_9.csv')
+sim_10$ind <- seq(1,nrow(sim_10),1)
+sim_10 <- gather(sim_10, var, value, mk.NOAR.ltrendweak.10:gls.strongAR.notrend.10, factor_key=TRUE)
+
+sim_20 <- read.csv('mae_results_20_4_9.csv')
+sim_20$ind <- seq(1,nrow(sim_20),1)
+sim_20 <- gather(sim_20, var, value, mk.NOAR.ltrendweak.20:gls.strongAR.notrend.20, factor_key=TRUE)
+
+sim_30 <- read.csv('mae_results_30_4_9.csv')
+sim_30$ind <- seq(1,nrow(sim_30),1)
+sim_30 <- gather(sim_30, var, value, mk.NOAR.ltrendweak.30:gls.strongAR.notrend.30, factor_key=TRUE)
+
+
+sim_10 <- sim_10 %>% mutate(value = plyr::mapvalues(value, 1e6, NA))
+sim_20 <- sim_20 %>% mutate(value = plyr::mapvalues(value, 1e6, NA))
+sim_30 <- sim_30 %>% mutate(value = plyr::mapvalues(value, 1e6, NA))
+
+sims <- rbind(sim_10, sim_20, sim_30)
+
+processor <- function(ar, trend, n){
+  gls_10 <- NULL
+  gls_20 <- NULL
+  gls_30 <- NULL
+  
+  mk_10 <- NULL
+  mk_20 <- NULL
+  mk_30 <- NULL
+  
+  assign(paste0("gls_",n),rbind(get(paste0("gls_",n)),
+                                sims[sims$var == paste0("gls.",ar,".",trend,".",n),]$value))
+  assign(paste0("mk_",n),rbind(get(paste0("mk_",n)),
+                               sims[sims$var == paste0("mk.",ar,".",trend,".",n),]$value))
+  
+  mk <- sort(get(paste0("mk_",n)))
+  gls <- sort(get(paste0("gls_",n)))
+  
+  if (length(mk) < length(gls)){
+    mk <- c(mk, rep(NA, length(gls) - length(mk)))
+  } else if (length(gls) < length(mk)){
+    gls<- c(gls, rep(NA, length(mk) - length(gls)))
+    
+  }
+  out <- data.frame(mk = mk,
+                    gls = gls)
+  
+  return(out)
+  
+}
+
+barplot_function <- function(ar = ar, trend = trend, trend.text = NULL,
+                             product = "MAE", first  = T, lab = lab){
+  
+  #collect
+  mat_10 <- processor(ar = ar, trend = trend,n = 10)
+  
+  mat_20 <- processor(ar = ar, trend = trend,n = 20)
+  mat_30 <- processor(ar = ar, trend = trend,n = 30)
+  
+  #mean and sd
+  mk10 <- mean(mat_10$mk)
+  mk_sd10 <- sd(mat_10$mk)
+  print(mk10)
+  mk20 <- mean(mat_20$mk)
+  mk_sd20 <- sd(mat_20$mk)
+  
+  mk30 <- mean(mat_30$mk)
+  mk_sd30 <- sd(mat_30$mk)
+  
+  gls10 <- mean(na.omit(mat_10$gls))
+  gls_sd10 <- sd(na.omit(mat_10$gls))
+  
+  gls20 <- mean(mat_20$gls)
+  gls_sd20 <- sd(mat_20$gls)
+  
+  gls30 <- mean(mat_30$gls)
+  gls_sd30 <- sd(mat_30$gls)
+  
+  #vector for barplot
+  vec <- c(mk10, gls10, mk20, gls20, mk30, gls30)
+  
+  sd_vec <- c(mk_sd10, gls_sd10, mk_sd20, gls_sd20, mk_sd30, gls_sd30)
+  print(sd_vec)
+  loc <- c(0.5,1.5,3.5,4.5,6.5,7.5)
+  
+  #plot
+  barplot(vec, space = c(0,0,1,0,1,0),las = 1,
+          ylim = c(0,3), col = rep(c('grey45','darkorange'),3), border = NA,
+          xaxt = "n")
+  box()
+  
+  #error bars
+  arrows(loc, vec-sd_vec, loc, vec+sd_vec, length=0.05, angle=90, code=3)
+  
+  #text
+  if(!is.null(trend.text)){
+    text(x = par()$usr[2]+1, y = 1.5, trend.text,
+         srt = 270, cex = 2.25, xpd = NA)
+  }
+  mtext(lab,cex = 1.5, line = 0.5)
+  
+  if (first == T){
+    mtext(2, text = product, line = 2, cex = .8) 
+    axis(1, at = c(1,4,7), labels = c("n = 10",20,30), tck = 0,cex.axis = 1.25)
+  } else {
+    axis(1, at = c(1,4,7), labels = c(10,20,30), tck = 0,cex.axis = 1.25)
+  }
+  
+  
+}
+
+plot.new()
+
+par(mfrow = c(4,3),mar = c(1.5,3.5,2.5,3), xpd = F,mgp=c(2.4,.45,0))
+#par(mfrow = c(1,1))
+#top row
+barplot_function(ar = "NOAR",trend = "ltrendstrong", first = T, lab = "no AR")
+legend(.75, 2.5, c("Sen's",'GLS'), bty = "n",
+       fill = c('grey45','darkorange'), cex = 1.75)
+barplot_function(ar = "medAR",trend = "ltrendstrong", first = F, lab = "med AR")
+barplot_function(ar = "strongAR",trend = "ltrendstrong", first = F, lab = "strong AR",
+                 trend.text = "strong trend")
+
+
+
+
+barplot_function(ar = "NOAR",trend = "ltrendmed", first = T, lab = "")
+barplot_function(ar = "medAR",trend = "ltrendmed", first = F, lab = "")
+barplot_function(ar = "strongAR",trend = "ltrendmed", first = F, lab = "",
+                 trend.text = "med trend")
+
+barplot_function(ar = "NOAR",trend = "ltrendweak", first = T, lab = "")
+barplot_function(ar = "medAR",trend = "ltrendweak", first = F, lab = "")
+barplot_function(ar = "strongAR",trend = "ltrendweak", first = F, lab = "",
+                 trend.text = "weak trend")
+
+barplot_function(ar = "NOAR",trend = "ltrendweak", first = T, lab = "")
+barplot_function(ar = "medAR",trend = "ltrendweak", first = F, lab = "")
+barplot_function(ar = "strongAR",trend = "ltrendweak", first = F, lab = "",
+                 trend.text = "no trend")
