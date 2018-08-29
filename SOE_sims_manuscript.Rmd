@@ -277,7 +277,7 @@ pal <- colorRampPalette(c("white","darkred"))
 set.seed(123)
 
 
-run <- T #Run simulations or pull from previous results
+run <- F #Run simulations or pull from previous results
 n = 1000 #number of simulations
 ARsd <- .54^.5 #standard deviation of innovations
 
@@ -289,6 +289,7 @@ strongAR <- 0.8
 ```
 
 ##Abstract
+The identification of trends in short time series is a favorable outcome for management action, although oftentimes assumptions inherent to trend assessment models are not properly accounted for. Here we applied three common statistical methods to assess trends in simulated time series of varying lengths, trend, and autocorrelation, including a generalized least squares model selection approach, the Mann-Kendall test, and Mann-Kendall test with trend-free pre-whitening. Our results suggest that the ability to detect trend in time series is hampered by the influence of autocorrelated residuals when series length is small. While it is known that tests designed to account for autocorrelation will approach nominal rejection rates aymptotically, the series lengths incorporated in this study (N = 10, 20, 30) bias rejection rates in the presence of weak autocorrelation. This work has implications for Ecosystem-Based Fisheries Management, where indicator time series are often limited in length, maintain a variety of error structures, and a single statistical method is typically applied to all time series. If the hypothesis testing approach for indicator time series is to be implemented, we suggest a parametric approach, which allows for modeling uncertainty and assigning trends based on an underlying probability distribution. 
 
 ##Introduction
 
@@ -302,33 +303,34 @@ strongAR <- 0.8
   
   Results indicate that correctly identifying trends is problematic using less than 30 data points, with both Type I and Type II error common. Even under the strongest signal-noise ratio (i.e. strong trends and no autocorrelation) tests perform poorly with only ten data points. The simulations highlight problems associated with standardizing approaches across indicators, and suggest that further thought is warranted on status and trend analysis in the context of ecosystem reporting.
 
-##Methods
-####Simulations
+## Methods
+#### Simulations
 Simulated time series were generated through the addition of $AR(1)$ autoregressive processes to first-order linear models:
 
-$$y = X\beta + \varepsilon_{t}, \:\: \mathrm{where} \:\: \varepsilon_{t} = \phi\varepsilon_{t-1} + \nu_{t}$$
+$$Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \varepsilon_{t} \\ \varepsilon_{t} = \rho\varepsilon_{t-1} + \omega_{t} \\ \omega_{t} \sim N(0, \sigma^{2})  $$
 
-where $X$ is the $n\:\times\:p$ model matrix, $\beta$ is a vector of model coefficients, and $\varepsilon_{t}$ is the $AR1$ error process; the strength of which is given by $\phi$. $\nu_{t}$ is assumed to be derived from Gaussian white noise. The levels of $\beta$ in our study were 0.004, .051, and .147, which we combined with four levels of $\phi$: 0, .43, .8, .95. These levels were chosen based on a preliminary analysis characterizing the distribution of trend and autocorrelation strengths across 2017 State of the Ecosystem time series data. Time series used in this preliminary step were normalized by $(y-\bar{y})/y_{sd}$ before parameter identification. 1000 simulations were implemented for all combinations of trend and autocorrelation strength. To test the null hypothesis of no trend in simulated time series, we used Generalized Least Squares, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
+where $Y_{t}$ is the simulated series at time $t$, $X_{t}$ is the time step, $\alpha_{1}$ is the slope component, and $\varepsilon_{t}$ is the $AR1$ error process; the strength of which is given by $\rho$, with the error component $\omega_{t}$ assumed to be derived from Gaussian white noise. The levels of $\alpha_{1}$ in our study were 0.026, .051, and .147, which we combined with three levels of $\rho$: 0, .43, and .8 These levels were chosen based on a preliminary analysis characterizing the distribution of trend and autocorrelation strengths across 2017 State of the Ecosystem time series data. Time series used in this preliminary step were normalized by $(y-\bar{y})/y_{sd}$ before parameter identification. 1000 simulations were implemented for all combinations of trend and autocorrelation strength. To test the null hypothesis of no trend in simulated time series, we used a generalized least squares model selection process, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
 
-####Generalized least squares
+#### Generalized least squares
 
-The Generalized Least Squares (GLS) model fitting process used here was an iterative model-selection approach. Two first order linear and two quadratic GLS models were fit to each simulated time series and best models were chosen using small sample AIC (AICc). One of each of the two linear and quadratic GLS models were specified with first-order autocorrelated error structure identical to the error process used to generate simulations. 
+A generalized least squares (GLS) model selection procedure was implemented to test for trend in simulated series. Two first order linear and two quadratic GLS models were fit to each simulated time series and best models were chosen using AICc. Specifically, the models were 1) linear trend with uncorrelated residuals, 2) linear trend with correlated residuals, 3) quadratic trend with uncorrelated residuals, and 4) quadratic trend with correlated residuals. Component GLS models were derived from
 
-Under $AR(1)$ error structure, the error-covariance matrix $\Sigma$ of the GLS estimator of $\beta$ is estimated by $\Sigma = \sigma^{2}P$, where $P$ is a diagonal matrix composed of error variances and autocorrelations from the data at different lag times ($\rho_{s}$). Error autocorrelations $\rho_{s}$ were estimated by restricted maximum-likelihood (REML) using the \textit{nlme} R package. The GLS estimator $b_{GLS}$ is given by
+$$Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \alpha_{1}X_{t}^{2} + \varepsilon_{t} \\ \varepsilon_{t} = \rho\varepsilon_{t-1} + \omega_{t} \\ \omega_{t} \sim N(0, \sigma^{2})  $$
+The above model follows the same notation as our simulated series, with $Y_{t}$ equivalent to an observation at time $t$. Setting $\alpha_{2} = 0$ yielded linear trend models, and $\rho = 0$ gave models with uncorrelated residuals. 
 
-$$b_{GLS} = (X'\Sigma^{-1} X)^{-1}X'\Sigma^{-1}y,$$
+Under $AR(1)$ error structure, the error-covariance matrix $\Sigma$ of the GLS estimator $\beta$ is estimated by $\Sigma = \sigma^{2}P$, where $P$ is a diagonal matrix composed of error variances and autocorrelations from the series at different lag times ($\rho_{s}$). Error autocorrelations $\rho_{s}$ were estimated by restricted maximum-likelihood (REML) using the \textit{nlme} R package. The GLS estimator $b_{GLS}$ is given by
 
-where $y$ is the response vector, and $X$ is an $n\:\times\:p$ model matrix. The covariance matrix of $b_{GLS}$ is
+$$b_{GLS} = (X'\Sigma^{-1} X)^{-1}X'\Sigma^{-1}Y_{t},$$
+
+where $Y_{t}$ is the response vector, and $X$ is an $n\:\times\:p$ design matrix. The covariance matrix of $b_{GLS}$ is
 
 $$\mathrm{Var}(b_{GLS}) = (X'\Sigma^{-1}X)^{-1}.$$
 
-The second pair of first order linear and quadratic GLS models were specified with normal error structure, $N(\mu,\sigma^{2})$. After selecting the best performing model using AICc, we performed likelihood ratio tests between the selected and null models specifying a maximum-likelihood approach to test the null of no trend given $\alpha = 0.05$.
+#### Mann Kendall test
+Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) (Mann 1945; Kendall 1975) and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW) (Yue et al. 2002). The MK test is a nonparametric test for trend that assumes sample data are independent and identically distributed. Serial correlation within sample data will lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test (von Storch 1995), such as residual pre-whitening, although pre-whitening is known to reduce the magnitude of existing trend (Yue et al. 2002). The Mann-Kendall with trend-free pre-whitening is a step-wise procedure developed by Yue et al. 2002 to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
 
-####Mann Kendall test
-Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) (Mann 1945; Kendall 1975) and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW) (Yue et al. 2002). The MK test is a non-parametric test for trend that assumes sample data are independent and identically distributed; an assumption frequently violated in time series data. Serial correlation within sample data will lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test (von Storch 1995), such as residual pre-whitening, although pre-whitening is known to reduce the magnitude of existing trend (Yue et al. 2002). The Mann-Kendall with trend-free pre-whitening is a step-wise procedure developed by Yue et al. 2002 to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
-
-$$S = \sum_{i=1}^{n-1}\sum_{j=i+1}^{n}\textrm{sgn}(y_{j} - y_{i}),$$
-where $y$ is the response vector, $n$ is the length of the series, and
+$$S = \sum_{i=1}^{n-1}\sum_{j=i+1}^{n}\textrm{sgn}(Y_{j} - Y_{i}),$$
+where $Y$ is the response vector, $n$ is the length of the series, and
 
 $$\textrm{sgn}(x)=\begin{Bmatrix}
 1 & \textrm{if}\:x>0\\ 
@@ -339,7 +341,7 @@ $$\textrm{sgn}(x)=\begin{Bmatrix}
 When there are no ties in the data, the variance of $S$ is given by 
 
 $$V(S) = \frac{n(n-1)(2n+5)}{18},$$
-and the distribution of $S$ when $n \geq 8$ is approximately normal and symmetric about a mean of 0. We then perform a two-sided test for trend using the standardized $Z$ statistic:
+and the distribution of $S$ when $n \geq 8$ is approximately normal and symmetric about a mean of 0 . We then perform a two-sided test for trend using the $Z$ statistic given by
 
 $$\textrm{Z}=\begin{Bmatrix}
 \frac{S-1}{\sqrt{V(S)}} & S>0\\ 
@@ -347,13 +349,13 @@ $$\textrm{Z}=\begin{Bmatrix}
 \frac{S+1}{\sqrt{V(S)}} & S<0\\ 
 \end{Bmatrix},$$
 
-which is drawn from a normal distribution with mean of zero and variance of one. Following Yue et al. 2002, a $P$ value for the test is determined using the standard normal cumulative distribution function
+which is drawn from a normal distribution with mean of zero and variance of one [@Wang2001a]. Following Yue et al. 2002, a $P$ value for the test is determined using the standard normal cumulative distribution function
 
 $$P = \int_{\infty}^{Z}e^{-t^{2}/2}\mathrm{d}t.$$
 For significance level $\alpha$, if $Z_{a/2} > |P|$, then we reject $H_{0}$ of no trend.  
 
 
-####Mann-Kendall trend-free pre-whitening (MK-TFPW)
+#### Mann-Kendall trend-free pre-whitening
 The Mann Kendall trend-free pre-whitening procedure as developed by Yue et al. 2002 is composed of four steps:
 ```{r render list, results='asis', eval = T, echo = F}
 
@@ -388,23 +390,17 @@ $$Y_{t} = Y_{t}^{'} + bt.$$
 }
 
 ```
+## Results
 
 
 
 
 
 
-
-
-
-
-
-
-
-##Results
-####Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
+#### Assessing power of trend detection tests under varying levels of autocorrelation, trend strength, and time series lengths. 
 ```{r assessing model power, echo = F}
 #Initialize null data.frame
+
 sim_results <-data.frame(matrix(ncol = 8, nrow = 0))
 names(sim_results) <- c("test","series.length", "n","trend", "ar", "mae", "rmse", "p")
 
@@ -414,7 +410,7 @@ if (run){
 for (m in c(10,20,30)){
   
   notrend <- rep(0,m)
-  ltrendweak <- -0.262 + (0.004 * c(1:m)) 
+  ltrendweak <- -0.262 + (0.0255 * c(1:m)) 
   ltrendmed <- -0.262 + (0.051 * c(1:m)) 
   ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
   print(paste("m =",m))
@@ -432,7 +428,9 @@ for (m in c(10,20,30)){
         print(i)
         #generate simulations
         dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = ARsd)
-        dat[1] <- rnorm(1,mean=0,sd=sqrt((ARsd^2)/(1-get(j)^2)))
+        if (j != "NOAR"){
+          dat[1] <- rnorm(1,mean=0,sd=sqrt((ARsd^2)/(1-get(j)^2)))
+        }
         
         #add autocorrelated error structure to trend
         dat <- get(k) + dat
@@ -453,6 +451,7 @@ for (m in c(10,20,30)){
         if (is.na(gls_sim[1])){
           gls_mae <- NA
           gls_rmse <- NA
+          pval <- NA
         } else {
           newtime <- seq(1, m, 1)
           newdata <- data.frame(time = newtime,
@@ -463,6 +462,7 @@ for (m in c(10,20,30)){
           ##Get error
           gls_rmse <- sqrt(mean((gls_pred - true_trend)^2))
           gls_mae <- mean(abs(gls_pred - true_trend))
+          pval <- gls_sim$best_lm$pval
         }
         
         #Results DF
@@ -473,7 +473,7 @@ for (m in c(10,20,30)){
                              ar = j,
                              mae = gls_mae,
                              rmse = gls_rmse,
-                             p = gls_sim$best_lm$pval)
+                             p = pval)
 
         #---------------------------------MK---------------------------------#
         mk <- MannKendall(dat$series)
@@ -521,6 +521,7 @@ for (m in c(10,20,30)){
 ```{r simulation results processing, echo = F}
 
 if (!run){load(file.path(data.dir,paste0("sim_results",Sys.Date(),".Rdata")))}
+if (!run){load(file.path(data.dir,paste0("sim_results_extended",Sys.Date(),".Rdata")))}
 
 #set factor levels for plotting
 sim_results$trend <- sim_results %>% pull(trend) %>%
@@ -536,7 +537,6 @@ sim_results$ar <- sim_results %>% pull(ar) %>%
 sim_results$trend = factor(sim_results$trend, levels=c('strong trend','medium trend','weak trend','no trend'))
 sim_results$ar = factor(sim_results$ar, levels=c('no AR','medium AR','strong AR'))
 sim_results$series.length = factor(sim_results$series.length, levels=c(10,20,30))
-
 
 #aggregate p values for plotting
 p_agg <- sim_results %>% group_by(series.length, trend, ar, test) %>%
@@ -655,16 +655,20 @@ for (m in seq(50,500,50)){
 ```
 
 
-```{r power subset figure, fig.align="center", fig.asp=0.45, eval = F, echo = F}
+```{r power subset figure, fig.align="center", fig.asp=0.45, eval = T, echo = F}
 
-pow <- out %>% group_by(var, n) %>% dplyr::summarise(rej_prop = length(p[p<0.05])/n())
+pow <- sim_results_ext %>% group_by(series.length, test) %>% dplyr::summarise(rej_prop = length(p[p<0.05])/n())
 
-ggplot(pow, aes(x = n, y = rej_prop, group = var,fill = var)) +
-  geom_bar(stat = "identity",position="dodge2") +
+pow$series.length <- as.factor(pow$series.length)
+levels(pow$test) <- c("GLS","Mann-Kendall","MK-TFPW")
+names(pow)[2] <- "Method"
+
+ggplot(pow, aes(x = series.length, y = rej_prop, group = Method,fill = Method)) +
+  geom_bar(stat = "identity",position="dodge") +
   geom_hline(yintercept=0.05, linetype="dashed", 
              color = "red", size=1) +
   ylab(expression(paste(N[Rej],"/",N[Tot],sep=""))) +
-  xlab("Series Length")
+  xlab("Series Length") 
 ```
 
   Simulation results show that no test for trend exceeded in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere [@Yue2002a; @Yue2002b], we show in Figure \ref{Fig1} that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detecting trends in series with N < 30. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. The rate of failing to reject the null hypothesis in the presence of trend decreased to < 0.1 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. When $\beta$ was greater than 0.04 under no autocorrelation and $N \geq 20$, the GLS test showed the highest rejection rate compared to other tests. Although slightly inflated when N=10, all tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios.
