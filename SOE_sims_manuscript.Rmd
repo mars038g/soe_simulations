@@ -4,16 +4,17 @@ author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
 date: "June 29, 2018"
 output:
   pdf_document: default
-  html_document: 
+  word_document: default
+  html_document:
     df_print: paged
-bibliography: SOE simulations.bib
-indent: true
+indent: yes
 header-includes:
-   - \usepackage{setspace}
-   - \doublespacing
-   - \usepackage{float}
-   - \usepackage[bottom]{footmisc}
-   - \usepackage{amsmath}
+- \usepackage{setspace}
+- \doublespacing
+- \usepackage{float}
+- \usepackage[bottom]{footmisc}
+- \usepackage{amsmath}
+bibliography: SOE simulations.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -389,7 +390,7 @@ which is drawn from a normal distribution with mean of zero and variance of one 
 
 \begin{equation}
 \begin{split}
-P = \int_{\infty}^{Z}e^{-t^{2}/2}\mathrm{d}t.
+P = \frac{1}{\sqrt{2\pi}} \int_{\infty}^{Z}e^{-t^{2}/2}\mathrm{d}t.
 \end{split}
  \label{eqn:7}
 \end{equation}
@@ -711,9 +712,9 @@ for (m in seq(50,500,50)){
 
 
 
-  Simulation results show that no test for trend performed well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere [@Yue2002a; @Yue2002b], we show in Figure \ref{Fig1} that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detecting trends in series with N < 30. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. The rate of failing to reject the null hypothesis in the presence of trend decreased to < 0.02 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. Under no autocorrelation, the GLS-MS test showed the highest rejection rates compared to other tests, although this effect was minmial (mean difference of <3% change in rejection rates between GLS and MK-TFPW). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 ($MK-TFPW_{rej} = 0.096$, $MK_{rej}= 0.035$, $GLS_{rej}= 0.065$).
+  Simulation results show that no test for trend performed well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere [@Yue2002a; @Yue2002b], we show in Figure \ref{Fig1} that time series length has a large effect on the power of each test. Under no autocorrelation, tests for trend are not effective at detecting trends in series with N < 30. When N = 10 with no autocorrelation and strong trend ($\beta$ = 0.8), no test detected trend in >50% of series. The rate of failing to reject the null hypothesis in the presence of trend decreased to < 0.02 when N = 20 with no autocorrelation and strong trend. The effect of increased power with increasing series length and no autocorrelation diminished with reductions in trend strength across all tests. Under no autocorrelation, the GLS-MS test showed the highest rejection rates compared to other tests, although this effect was minimal (mean difference of <3% change in rejection rates between GLS and MK-TFPW). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 ($MK-TFPW_{rej} = 0.096$, $MK_{rej}= 0.035$, $GLS_{rej}= 0.065$).
   
-```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the ratio of number of rejections (\\textit{p}<0.05) to number of total simulations. Subplots are representative of different autocorrelation and trend scenarios, with time series length increasing along the x axis. Colored bars show results from different tests for trend.\\label{Fig1}"}
+```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the ratio of number of rejections (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation and trend scenarios, with time series length increasing along the x axis. Colored bars show results from different tests for trend.\\label{Fig1}"}
 
 levels(p_agg$test) <- c("GLS","Mann-Kendall","MK-TFPW")
 names(p_agg)[4] <- "Method"
@@ -731,11 +732,11 @@ ggplot(p_agg, aes(color = Method, y = prop,
 
   Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@VonStorch1999a; @Yue2002a], and our work also shows that under no simulated trend, introducing autocorrelation will lead to inflated rejection rates in the MK test. Figure 1 shows that under no trend and strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates under both medium and strong autocorrelation scenarios with increasing series length.
 
-  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was 0.16, a 46% and 64% decrease from the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the Mk-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only 13.9% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by 59%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.  
+  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was 0.16, a 46% and 64% decrease from the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the MK-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only 13.9% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by 59%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.  
 
 Extending this no trend and strong autocorrelation scenario out to longer series lengths shows that the GLS test reaches nominal rejection rates of 0.05 only when $N > 200$ (Figure \ref{Fig2}). The same may be true of the MK-TFPW test when $N > 350$, although this work did not seek to identify a precise value of $N$ where the MK-TFPW approach reached nominal levels. As expected, the MK test performed poorly in this scenario, and saw no reduction in rejection rates as $N$ increased. 
 
-```{r power subset figure, fig.align="center", fig.asp=0.45, eval = T, echo = F, fig.show = "h", fig.cap= "Barplot showing the ratio of number of rejections (\\textit{p}<0.05) to number of total simulations, when simulations were created under the parameters of no trend $(\\alpha_{1} = 0)$, strong autocorrelation $(\\rho = 0.8)$, and series lengths between \\textit{N} = 50 to $N = 500$. The dashed red line shows the nominal rejection rate of 0.05.\\label{Fig2}"}
+```{r power subset figure, fig.align="center", fig.asp=0.45, eval = T, echo = F, fig.show = "h", fig.cap= "Barplot showing the ratio of number of rejections (\\textit{P}<0.05) to number of total simulations, when simulations were created under the parameters of no trend $(\\alpha_{1} = 0)$, strong autocorrelation $(\\rho = 0.8)$, and series lengths between \\textit{N} = 50 to $N = 500$. The dashed red line shows the nominal rejection rate of 0.05.\\label{Fig2}"}
 
 pow <- sim_results_ext %>% group_by(series.length, test) %>% dplyr::summarise(rej_prop = length(p[p<0.05])/n())
 
