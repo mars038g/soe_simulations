@@ -1,0 +1,27 @@
+library(plotly)
+g <- list(
+  scope = 'europe',
+  showland = TRUE,
+  landcolor = toRGB("gray95"),
+  subunitcolor = toRGB("gray85"),
+  countrycolor = toRGB("gray85"),
+  countrywidth = 0.5,
+  subunitwidth = 0.5
+)
+
+
+df06 <- data.frame(SHOP_NAME = letters,
+                   AVG_CARDS_USE = rnorm(26),
+                   LAT = 52.87984,
+                   LNG = 20.61813)
+
+p <- plot_geo(locationmode = 'Europe', df06, lat = ~LAT, lon = ~LNG) %>%
+  add_markers(
+    text = ~paste(SHOP_NAME, paste("AVG_CARD_USE:", AVG_CARDS_USE), sep = ""),
+    color = ~AVG_CARDS_USE, symbol = I("square"), size = I(8), hoverinfo = "text"
+  ) %>%
+  colorbar(title = "Average Cards use br /> August 2018") %>%
+  layout(
+    title = 'Average Cards use 
+    (Use per shop)', geo = g
+  )

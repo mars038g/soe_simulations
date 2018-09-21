@@ -1,0 +1,22 @@
+{
+    "collab_server" : "",
+    "contents" : "",
+    "created" : 1537471408414.000,
+    "dirty" : true,
+    "encoding" : "UTF-8",
+    "folds" : "51|58|208|0|\n709|38|854|0|\n856|46|879|0|\n1253|54|1409|0|\n",
+    "hash" : "1177071585",
+    "id" : "E7FAB63E",
+    "lastKnownWriteTime" : 1537555097,
+    "last_content_update" : 1537549919756,
+    "path" : "~/soe_simulations/SOE_sims_manuscript.Rmd",
+    "project_path" : "SOE_sims_manuscript.Rmd",
+    "properties" : {
+        "cursorPosition" : "1251,1",
+        "scrollLine" : "1241"
+    },
+    "relative_order" : 1,
+    "source_on_save" : false,
+    "source_window" : "",
+    "type" : "r_markdown"
+}

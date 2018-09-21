@@ -1,0 +1,290 @@
+#' ESR time series plot
+#'
+#' A plotting function for producing standardized ESR time series figures. The requirement for using this function
+#' is input data in long format.
+#'
+#' @param dat A data frame containing time series data in long format.
+#' @param var.col The name of the column containing variable names of interest.
+#' @param series The variable names of interest in the var.col column. Multiple time series may be passed
+#' as a list to this parameter (see examples)
+#' @param time.col The name of the column containing time data.
+#' @param value.col The name of the column containing series values.
+#' @param plot.layout A vector mapping multiple series to figures. For example, plot.layout = c(1,2,2) specifies
+#' two figures, the first with one series plotted and the second with two series plotted.
+#' @param y.lab y label, defaults to series.var
+#' @param x.lab x label, defaults to "Time".
+#' @param x.start Initial time value for plotting series.
+#' @param shade A logical value. If TRUE, last 10 years of figure are shaded.
+#' @param shade.alpha Specifies transparency of shaded region.
+#' @param trend A logical value. If TRUE, a trend is fit to the series using \code{\link{gls.ms}}.
+#' @param conf_int A logical value. If TRUE, confidence intervals are plotted with the trend line.
+#' @param facet A logical value. Must be TRUE to produce multiple faceted time series figures.
+#' @param facet_scale Allows x and y scales of faceted plots to be scaled independently.
+#' @param facet.labs Add text labels to faceted figures by specifying a character vector here.
+#'
+#' @return A ggplot object containing time series figure of interest.
+#'
+#' @examples
+#'
+#'Single time series
+#'esr.ts(SOE.data.2018,
+#'       var.col = "Var",
+#'       time.col = "Time",
+#'       value.col = "Value",
+#'       y.lab = expression("Landings, 10"^3*" metric tons"),
+#'       series = "Apex Predator Landings MAB",
+#'       trend = T)
+#'
+#'Multiple time series
+#' esr.ts(SOE.data.2018,
+#'       var.col = "Var",
+#'       time.col = "Time",
+#'       value.col = "Value",
+#'       y.lab = expression("Landings, 10"^3*" metric tons"),
+#'       series = list("Apex Predator Landings MAB",
+#'                     "Piscivore Landings MAB",
+#'                     "Piscivore MAFMC managed species sea food MAB",
+#'                     "Planktivore Landings MAB",
+#'                     "Planktivore MAFMC managed species sea food MAB"),
+#'       plot.layout = c(1,2,2,3,3),
+#'       trend = T,conf_int = F, facet = T,
+#'       facet_scale = "free_y",drop_facet_theme = T,
+#'       shade.alpha = 0.25,  col.group = F, inc.leg = F,
+#'       facet.labs = c("A","B","C"))
+
+
+
+esr.ts <- function(dat, var.col, series = list(...), time.col, value.col,
+                   leg.vec = NULL, y.lab = NULL, plot.layout = 1,
+                   x.lab = NULL, x.start = NULL, shade.alpha = 0.25,
+                   trend = T, conf_int = F, shade = T, facet= F,
+                   facet_scale,drop_facet_theme = F, col.group = F,
+                   inc.leg = F, facet.labs = NULL, lab.size = 5){
+  # soe_palette <- NULL
+  #
+  # for (i in 1:length(unique(plot.layout))){
+  #
+  #   if (length(plot.layout[which(plot.layout == plot.layout[i])]) == 1){
+  #     assign("soe_palette", rbind(soe_palette, "#000000"))
+  #   } else if (length(plot.layout[which(plot.layout == plot.layout[i])]) == 2) {
+  #     assign("soe_palette", rbind(soe_palette, c("#000000", "#D55E00")))
+  #   } else if (length(plot.layout[which(plot.layout == plot.layout[i])]) > 2){
+  #     assign("soe_palette", rbind(soe_palette, c("#000000", "#D55E00", RColorBrewer::brewer.pal(9, "Set1"))))
+  #   }
+  #
+  # }
+
+
+  # Data wrangling -------------------------------------------------------------
+  d <- dat %>% dplyr::filter(get(var.col) %in% series)
+
+  #rename column variables to common names
+  n <- as.numeric(which(names(d) == var.col))
+  names(d)[n] <- "var"
+  n <- as.numeric(which(names(d) == time.col))
+  names(d)[n] <- "time"
+  n <- as.numeric(which(names(d) == value.col))
+  names(d)[n] <- "value"
+
+  #set starting date for time series and sort data frame by series input
+  d <- d %>% dplyr::group_by(var) %>%
+    {if (!is.null(x.start)) dplyr::filter(.,time >= x.start) else d} %>%
+    droplevels() %>%
+    arrange(factor(var, levels = unlist(series))) %>%
+    ungroup()
+
+  #add column specifying which time series goes with which figure
+  if (length(plot.layout) > 1){
+    d <- d %>% mutate(plot.layout = plyr::mapvalues(var, from = unlist(series),
+                                                    to = plot.layout))
+  } else {
+    d <- d %>%
+      mutate(plot.layout = 1)
+    }
+
+  #set factor levels for plotting order
+  d$var <- factor(d$var, levels = unlist(series))
+
+  # Trend fitting -------------------------------------------------------------
+  if (conf_int & !trend){
+    stop("Can't get intervals without fitting trend")
+  }
+
+  #do this if trend == TRUE
+  if(trend){
+    if (nrow(d)<30){
+      print("Warning: N < 30")
+    }
+
+    #fit GLS
+    out <- NULL
+    for (i in 1:length(unique(d$var))){
+      out1 <- gls.ms(dat = d[d$var == unique(d$var)[i],],
+                     time.var = "time",
+                     series.var = "value")
+      out_df <- out1[[1]]
+      out_df$p <- out1[[2]]
+      out_df$var <- unique(d$var)[i]
+      assign('out',rbind(out, out_df))
+    }
+
+    #data wrangling
+    out <- out %>% mutate(plot.layout = plyr::mapvalues(var, from = unique(var), to = plot.layout)) %>%
+      arrange(plot.layout) %>% mutate(var = factor(var)) %>%
+      droplevels() %>%
+      arrange(factor(var, levels = unlist(series))) %>%
+      ungroup()
+
+    #set factor levels
+    out$var <- factor(out$var, levels = unlist(series))
+
+    #assign positive or negative designation for plotting
+    p_or_n <- NULL
+    for (i in 1:length(unique(out$var))){
+      for (j in 1:length(out[out$var == unique(out$var)[i],]$trend_line)){
+        #print(j)
+        if (is.na(out[out$var == unique(out$var)[i],]$trend_line[1])){
+          assign("p_or_n",rbind(p_or_n, "non-sig"))
+
+        } else if (out[out$var == unique(out$var)[i],]$trend_line[1] <
+                   out[out$var == unique(out$var)[i],][length(out[out$var == unique(out$var)[i],]$trend_line),]$trend_line) {
+          assign("p_or_n",rbind(p_or_n, "positive"))
+
+        } else if (out[out$var == unique(out$var)[i],]$trend_line[1] >
+                   out[out$var == unique(out$var)[i],][length(out[out$var == unique(out$var)[i],]$trend_line),]$trend_line) {
+          assign("p_or_n",rbind(p_or_n, "negative"))
+        }
+      }
+    }
+
+    out$p_or_n <- p_or_n
+
+  }
+
+  # Plot parameters -------------------------------------------------------------
+
+  #x label
+  if (!is.null(x.lab)){
+    x.lab <- x.lab
+  } else {
+    x.lab <- "Time"
+  }
+
+  #y label
+  if (!is.null(y.lab)){
+    y.lab <- y.lab
+  } else {
+    y.lab <- series
+  }
+
+  #set x range of shaded region
+  x.shade.max <- max(d$time)
+  x.shade.min <- x.shade.max - 9
+
+  #specify legend text
+  if (!is.null(leg.vec)){
+    if (length(leg.vec) != length(unique(d$var))){
+      stop("Number of legend items must equal number of unique variables")
+    }
+    leg <- structure(leg.vec, names=as.character(unique(d$var)))
+    d <- d %>% group_by(var) %>%
+      mutate(leg = plyr::mapvalues(var, from = unique(var), to = leg.vec))
+
+  } else {
+    leg <- unique(d$var)
+    leg.vec <- unique(d$var)
+    d <- d %>% group_by(var) %>%
+      mutate(leg = plyr::mapvalues(var, from = unique(var), to = leg.vec))
+  }
+
+  #create data.frame for attaching letter labels to faceted figures
+  if (length(plot.layout) > 1){
+    f = d %>% group_by(var) %>%
+      dplyr::summarise(y.place = max(value),
+                       x.place = min(time)) %>%
+      mutate(plot.layout = plot.layout)
+
+    #control for scaling changes in the y axis
+    if (facet_scale == "free" | facet_scale == "free_y"){
+      facet.labels <- f %>% group_by(plot.layout) %>% filter(y.place == max(y.place)) %>%
+        mutate(x.place = min(x.place),labs = facet.labs)
+
+    #if y scaling is held constant between facets, assign label location to max y value
+    } else {
+      facet.labels <- f %>%
+        mutate(x.place = min(x.place),labs = facet.labs, y.place = max(y.place))
+
+    }
+  }
+
+  #Time series plot  -------------------------------------------------------------
+  ts.plot <- ggplot2::ggplot(data = d, aes(x = time, y = value,
+                                  group = var, col = leg))  +
+
+    #shade last ten years
+    {if(shade)
+      annotate("rect", fill = "lightgrey", alpha = shade.alpha,
+      xmin = x.shade.min, xmax = x.shade.max,
+      ymin = -Inf, ymax = Inf)
+      } +
+
+    #labels
+    labs(x = x.lab, y = y.lab, col = "") +
+
+    #lines and points
+    geom_line() +
+    geom_point() +
+
+    #plot trend line
+    {if (trend)
+      {if (!is.na(out$trend_line[1]))
+      geom_line(data = out, aes(x = time, y = trend_line, group = var, col = p_or_n),
+                size=2, alpha=0.4)
+        }
+      }+
+    theme_bw()
+
+    #plot confidence intervals
+    if (conf_int){
+       ts.plot <- ts.plot +
+         ggplot2::geom_line(data = out, aes(x = time,y = ci_lower, group = var), alpha = 0.2) + #Add lower CI
+         geom_line(data = out, aes(x = time,y = ci_upper, group = var), alpha = 0.2)  #Add upper CI
+    }
+
+    #conditional facet
+    if (facet){
+      if (length(plot.layout) == 1){
+        stop("Adjust plot.layout before faceting")
+      }
+      ts.plot <- ts.plot + facet_wrap(plot.layout~., scales = facet_scale, labeller = labeller(var = leg), ncol = 1) +
+      {if(drop_facet_theme) theme(plot.title = element_blank(),
+                                  strip.background = element_blank(),
+                                  strip.text.x = element_blank())
+        }
+    }
+    ts.plot <- {if(inc.leg)
+      ts.plot + theme(axis.text = element_text(size = 13),
+                                  axis.title.x = element_text(size = 16),
+                                  axis.title.y = element_text(size = 16),
+                                  legend.text=element_text(size=12))
+      else
+        ts.plot + theme(axis.text = element_text(size = 13),
+                        axis.title.x = element_text(size = 16),
+                        axis.title.y = element_text(size = 16),
+                        legend.position = "none")
+      }
+
+    ts.plot <- {if(!is.null(facet.labs) & length(plot.layout) > 1)
+      ts.plot + geom_text(data = facet.labels, aes(x = x.place,
+                                                   y = y.place,
+                                                   label = labs),
+                          inherit.aes = F,size = lab.size)
+
+      else
+        ts.plot
+      }
+
+
+    return(ts.plot)
+
+}

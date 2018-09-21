@@ -1,0 +1,2133 @@
+---
+title: "State of the Ecosystem - Mid-Atlantic Bight"
+author: "Northeast Fisheries Science Center"
+date: 'June 01, 2018'
+graphics: yes
+output:
+  pdf_document:
+    includes:
+      in_header: preamble-latex.tex
+    keep_tex: yes
+    pandoc_args: --latex-engine=xelatex
+    toc: no
+  html_document:
+    toc: yes
+fontsize: 11pt
+header-includes: 
+- \usepackage{float}
+- \usepackage[bottom]{footmisc}
+geometry: margin=1cm, footskip=.5cm
+self_contained: no
+---
+```{r Directory and Data Set-up, echo=F, message=F, warning=FALSE, paged.print=TRUE}
+#data.dir  <- '/home/slucey/EcoAP/SOE/2018'
+#image.dir <- '/home/slucey/EcoAP/SOE/2018/images'
+#data.dir <- 'Z:\\SOE2017\\data'
+#image.dir <- 'Z:\\SOE2017\\images'
+data.dir  <- "c:/users/sean.hardison/documents/soe_compile"
+image.dir <- "c:/users/sean.hardison/documents/soe_compile/images"
+gis.dir <- 'c:/users/sean.hardison/documents/soe_compile/gis'
+# data.dir  <- '/users/sgaichas/Documents/0_Data/ESR/SOE2018'
+# image.dir <- '/users/sgaichas/Documents/0_Data/ESR/SOE2018/images'
+# gis.dir <- '/users/sgaichas/Documents/0_Data/ESR/SOE2018/usa_shape_files'
+
+#STOP HERE
+#Do you have the most updated version of the SOE.data.2018 dataset AND the necessary spatial data? Check the SOE_MAB google drive for most recent version.
+
+
+load(file.path(data.dir, "SOE_data_2018.Rdata"))
+# latex figure folder
+knitr::opts_chunk$set(echo = FALSE, fig.path = './iea_figs_MAB/')
+
+#The map_figs option can be set to FALSE to skip making maps on the fly (they will be missing). Or TRUE to make them. Some printers have issues with how knitr compiles maps in this document. Turn printer_friendly to TRUE to load maps from .png files. Image files can be found on the google drive directory /SOE_figures/images/. Email sean.hardison@noaa.gov for copies of these images.
+
+map_figs <- T
+printer_friendly <- T
+
+```
+
+```{r libraries, echo=F, message=F, warning=FALSE, paged.print=TRUE, results = 'hide'}
+library(Kendall);library(data.table);library(zoo)
+library(dplyr);library(nlme);library(AICcmodavg)
+library(colorRamps);library(Hmisc);library(rgdal)
+library(maps);library(raster);library(mapdata)
+library(grid);library(stringr);library(png)
+library(ncdf4);library(marmap); library(magick);
+library(knitr)
+
+
+#get map data and set constants
+#projection
+map.crs <- CRS("+proj=longlat +lat_1=35 +lat_2=45 +lat_0=40 +lon_0=-77 +x_0=0
+               +y_0=0 +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
+
+#coastline
+coast <- readOGR(gis.dir, 'NES_LME_coast', verbose = F)
+coast <- spTransform(coast,map.crs)
+
+#bathymetry
+bathy <- raster(paste0(gis.dir,"/NES_bathymetry.tif"))
+e  <- extent(-78.5, -64, 33, 45)
+bathy <- crop(bathy, e)
+
+#define extents for cropping
+e  <- extent(-77.2, -64.2, 35, 48)
+th_extent <-extent(-77,-65,35,45) #thermal habitat
+
+#crop bathymetry
+th <- crop(bathy,th_extent)
+
+#projections
+projection(th) <- map.crs
+projection(bathy) <- map.crs
+
+#get strata files to clip thermal habitat projections
+strata <- readOGR(gis.dir,"strata", verbose = F)
+strata@proj4string <- map.crs
+
+
+```
+
+```{r libraries and functions, include=F, echo = F}
+options(repos = c(CRAN = "http://cran.rstudio.com"))
+
+
+fit_lm <- function(dat) {
+  # Remove missing values first so that all models
+  # use the same number of observations (important for AIC)
+  # dat <- dat %>% dplyr::filter(complete.cases(.))
+  
+  # Constant model (null model used to calculate 
+  # overall p-value)
+  constant_norm <-
+    nlme::gls(series ~ 1, 
+              data = dat)
+  
+  constant_ar1 <-
+    try(nlme::gls(series ~ 1,
+                  data = dat,
+                  correlation = nlme::corAR1(form = ~time)))
+  if (class(constant_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA)) 
+  } 
+  
+  
+  
+  # Linear model with normal error
+  linear_norm <- 
+    nlme::gls(series ~ time, 
+              data = dat)
+  
+  # Linear model with AR1 error
+  linear_ar1 <- 
+    try(nlme::gls(series ~ time, 
+                  data = dat,
+                  correlation = nlme::corAR1(form = ~time)))
+  if (class(linear_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA))
+    
+  }
+  
+  # Polynomial model with normal error
+  dat$time2 <- dat$time^2
+  poly_norm <- 
+    nlme::gls(series ~ time + time2, 
+              data = dat)
+  
+  # Polynomial model with AR1 error
+  poly_ar1 <- 
+    try(nlme::gls(series ~ time + time2, 
+                  data = dat,
+                  correlation = nlme::corAR1(form = ~time)))
+  if (class(poly_ar1) == "try-error"){
+    return(best_lm <- data.frame(model = NA,
+                                 aicc  = NA,
+                                 coefs..Intercept = NA,
+                                 coefs.time = NA,
+                                 coefs.time2 = NA,
+                                 pval = NA))
+    
+  }
+  
+  # Calculate AICs for all models
+  df_aicc <-
+    data.frame(model = c("poly_norm",
+                         "poly_ar1",
+                         "linear_norm",
+                         "linear_ar1"),
+               aicc  = c(AICc(poly_norm),
+                         AICc(poly_ar1),
+                         AICc(linear_norm),
+                         AICc(linear_ar1)),
+               coefs = rbind(coef(poly_norm),
+                             coef(poly_ar1),
+                             c(coef(linear_norm), NA),
+                             c(coef(linear_ar1),  NA)),
+               # Calculate overall signifiance (need to use
+               # ML not REML for this)
+               pval = c(anova(update(constant_norm, method = "ML"),
+                              update(poly_norm, method = "ML"))$`p-value`[2],
+                        anova(update(constant_ar1, method = "ML"),
+                              update(poly_ar1, method = "ML"))$`p-value`[2],
+                        anova(update(constant_norm, method = "ML"),
+                              update(linear_norm, method = "ML"))$`p-value`[2],
+                        anova(update(constant_ar1, method = "ML"),
+                              update(linear_ar1, method = "ML"))$`p-value`[2]))
+  
+  best_lm <-
+    df_aicc %>%
+    dplyr::filter(aicc == min(aicc))
+  
+  
+  if (best_lm$model == "poly_norm") {
+    model <- poly_norm
+  } else if (best_lm$model == "poly_ar1") {
+    model <- poly_ar1
+  } else if (best_lm$model == "linear_norm") {
+    model <- linear_norm
+  } else if (best_lm$model == "linear_ar1") {
+    model <- linear_ar1
+  }
+  
+  return(list(p = best_lm$pval,
+              model = model))
+}
+
+
+#Plot new figure - Set end.start to 10 years before end of time series
+
+soe.plot <- function(data, x.var, y.var, x.label = '', y.label = '', tol = 0.1,
+                     x.start = NA, x.end = NA, end.start = 2008, bg.col = background, mean_line = T,
+                     end.col = recent, stacked = NA, x.line = 2.5, y.line = 3.5, scale.axis = 1,
+                     rel.y.num = 1.5, rel.y.text = 1.5, suppressAxis = FALSE,status  = F,anomaly = F,
+                     endshade = TRUE, full.trend = TRUE, point.cex = 1.5, lwd = 2, ymax = TRUE,ymin = TRUE,
+                     y.upper = y.upper, y.lower = y.lower, extra = FALSE, x.var2 = x.var2, y.var2 = y.var2,
+                     line.forward = FALSE, mean_line.2 = T, cex.stacked = 1, website = T) {
+  
+  #print("You'll need to remove or interpolate NA values before this function will work")
+  
+  #Select Data
+  x <- data[Var == y.var, ]
+  x <- x[order(x[, get(x.var)]), ]
+  setnames(x, x.var, 'X')
+  
+  #Set common time step if necessary
+  if(is.na(x.start)) x.start <- min(x[, X])
+  if(is.na(x.end))   x.end   <- max(x[, X])
+  x <- x[X >= x.start, ]
+  
+  #Set up plot parameters
+  if (ymax == TRUE){
+    y.max <- max(x[, Value]) + tol * max(x[, Value])
+  } else {
+    y.max <- as.numeric(y.upper)
+  }
+  
+  if (ymin == TRUE){
+    y.min <- min(x[, Value]) - tol * abs(min(x[, Value]))
+  } else if (ymin == FALSE){
+    y.min <- as.numeric(y.lower)
+  }
+  
+  y.mean <- mean(x[, Value])
+  y.sd <- sd(x[, Value])
+  
+  #Plot blank plot
+  plot(x[X >= x.start, list(X, Var)], xlim = c(x.start, x.end),
+       ylim = c(y.min,y.max), xlab = '', ylab = '', axes = F, ty = 'n')
+
+
+  #Add background
+  u <- par('usr')
+  rect(u[1], u[3], u[2], u[4], border = NA, col = bg.col)
+  
+  #Add end period shading
+  if (endshade == TRUE){
+    rect(end.start - 0.5, u[3], u[2], u[4], border = NA, col = end.col)
+  }
+  
+  #Add mean line
+  if (anomaly == F){
+      if (mean_line == TRUE){
+      abline(h = y.mean, col = 'grey', lwd = 3, lty = 2)
+      } 
+  } else if (anomaly == TRUE){
+      abline(h = 0, col = 'grey', lwd = 3, lty = 2)
+  }
+  
+  #Add x y lines
+  abline(h = u[3], lwd=3)
+  abline(v = u[1], lwd=3)
+  
+  #Add data points/lines
+  points(x[, list(X, Value)], pch = 16, cex = point.cex)
+  lines( x[, list(X, Value)], lwd = lwd)
+  
+  #extra lines
+  if (extra == TRUE){
+    x2 <- data[Var == y.var2, ]
+    x2 <- x2[order(x2[, get(x.var2)]), ]
+    setnames(x2, x.var2, 'X2')
+    x2 <- x2[X2 >= x.start, ]
+    if (mean_line.2 == TRUE){
+     abline(h = mean(x2[, Value]), col = 'lightcoral', lwd = 3, lty = 2) 
+    }
+    points(x2[, list(X2, Value)], pch = 16, cex = point.cex, col = "indianred")
+    lines( x2[, list(X2, Value)], lwd = lwd, col = "indianred")
+    }
+    
+  
+  #Add axis
+  if (suppressAxis == FALSE){
+    if(is.na(stacked)) axis(1, cex.axis = 1)
+    if(!is.na(stacked)){
+      if(stacked!= 'A') axis(3, cex.axis = 1.5, tck = 0.1, labels = F)
+    }
+  }
+
+  #Stacked axes with 0 overlap so need to remove
+  labels <- round((axTicks(2) / scale.axis), 5)
+  if(labels[1] == 0) labels[1] <- ''
+  axis(2, at = axTicks(2), labels = labels, cex.axis = rel.y.num,
+       las = T)
+
+    #Add axis labels
+    if(!website){
+      if(!is.na(stacked)) text(u[1], u[4], labels = stacked, cex = cex.stacked, adj = c(-0.5, 1.5))
+    } else if (website){
+      text(u[1], u[4], labels = "", cex = cex.stacked, adj = c(-0.5, 1.5))
+    }
+    if(is.na(stacked)){
+      mtext(1, text = x.label, line = x.line, cex = 1)
+      mtext(2, text = y.label, line = y.line, cex = rel.y.text)
+    }
+  
+    if (full.trend == T){
+    #Split data into past decade and full time series
+    dat <- as.data.frame(x[, list(X, Value)])
+    
+    dat <- dat %>% dplyr::rename(series = Value) %>%
+      mutate(time = seq(1,nrow(dat),1))
+    
+    # Fit linear model
+    lm_out <- fit_lm(dat = dat)
+    p <- lm_out$p
+    if (p < .05){
+        
+      newtime <- seq(min(dat$time), max(dat$time), length.out=length(dat$time))
+      newdata <- data.frame(time = newtime,
+                      time2 = newtime^2)
+      lm_pred <- AICcmodavg::predictSE(lm_out$model, 
+                                 newdata = newdata,
+                                 se.fit = TRUE)
+
+      year <- seq(x$X[1],x$X[length(x$X)],length.out = length(dat$time))
+
+      # Make plot
+      if (lm_pred$fit[length(lm_pred$fit)] > lm_pred$fit[1]){
+        lines(year, lm_pred$fit, col = main.pos, lwd = 7)
+        points(x[, list(X, Value)], pch = 16, cex = point.cex)
+        lines( x[, list(X, Value)], lwd = lwd)
+
+        if (line.forward == TRUE){
+           lines(year, lm_pred$fit, col = main.pos, lwd = 7)
+        }
+      } else if (lm_pred$fit[length(lm_pred$fit)] < lm_pred$fit[1]){
+        lines(year, lm_pred$fit, col = main.neg, lwd = 7)
+        points(x[, list(X, Value)], pch = 16, cex = point.cex)
+        lines( x[, list(X, Value)], lwd = lwd)
+        if (line.forward == TRUE){
+           lines(year, lm_pred$fit, col = main.neg, lwd = 7)
+        }
+      }
+    }
+    
+    if (extra == TRUE){
+      
+      # Second variable
+      dat <- as.data.frame(x2[, list(X2, Value)])
+    
+      dat <- dat %>% dplyr::rename(series = Value) %>%
+      mutate(time = seq(1,nrow(dat),1))
+    
+     # Fit linear model
+      lm_out <- fit_lm(dat = dat)
+      p <- lm_out$p
+      points(x2[, list(X2, Value)], pch = 16, cex = point.cex, col = "indianred")
+      lines( x2[, list(X2, Value)], lwd = lwd, col = "indianred")
+      if (p < .05){
+    
+        newtime <- seq(min(dat$time), max(dat$time), length.out=length(dat$time))
+        newdata <- data.frame(time = newtime,
+                      time2 = newtime^2)
+        lm_pred <- AICcmodavg::predictSE(lm_out$model, 
+                                 newdata = newdata,
+                                 se.fit = TRUE)
+
+        year <- seq(x2$X2[1],x2$X2[length(x2$X2)],length.out =length(dat$time))
+   
+    # Make plot
+        if (lm_pred$fit[length(lm_pred$fit)] > lm_pred$fit[1] ){
+          lines(year, lm_pred$fit, col = main.pos, lwd = 7)
+          points(x2[, list(X2, Value)], pch = 16, cex = point.cex, col = "indianred")
+          lines( x2[, list(X2, Value)], lwd = lwd, col = "indianred")
+        } else if (lm_pred$fit[length(lm_pred$fit)] < lm_pred$fit[1]){
+          lines(year, lm_pred$fit, col = main.neg, lwd = 7)
+          points(x2[, list(X2, Value)], pch = 16, cex = point.cex, col = "indianred")
+          lines( x2[, list(X2, Value)], lwd = lwd, col = "indianred")
+        } 
+     }
+    }
+
+  }
+
+
+ 
+}  
+
+
+#Add axis labels for stacked plots
+soe.stacked.axis <- function(x.label, y.label, x.line = 2.5,rel.x.text = 1.5,
+                             y.line = 3.5, rel.y.text = 1.5, outer = TRUE){
+  axis(1, cex.axis = rel.x.text)
+  mtext(1, text = x.label, line = x.line, cex = rel.x.text, outer = outer)
+  mtext(2, text = y.label, line = y.line, cex = rel.y.text, outer = outer)
+  
+}
+
+
+#Background colors
+background   <- 'white'
+recent       <- '#E6E6E6'
+main.pos <- rgb(253/255, 184/255, 99/255,  alpha = .9)
+main.neg <- rgb(178/255, 171/255, 210/255, alpha = .9)
+
+#Finder function for quickly finding variables based on partial match
+finder <- function(data, match = match, factor = T){
+  found <- unique(data[grepl(match,data$Var),]$Var)
+  if (factor == T){
+    return(found)
+  } else {
+    return(as.character(found))
+  }
+  
+}
+
+
+#thermal habitat map function
+th_plot <- function(data, letter, z.max, y.axis = T,
+                    legend = T, pos){
+  if (pos == 'topleft'){
+    par(mar=c(3.9, 2.8,3.5,0), mex = .3,  mgp = c(4, .35, 0))
+  } else if (pos == 'topright'){
+    par(mar=c(3.9, 0, 3.5, 2.8), mex = .3,  mgp = c(4, .35, 0))
+  } else if (pos == "bottomleft"){
+    par(mar=c(3.9,2.8,3.5,0), mex = .3,  mgp = c(4, .35, 0))
+  } else if (pos == "bottomright"){
+    par(mar=c(3.9, 0, 3.5, 2.8), mex = .3,  mgp = c(4, .35, 0))
+  }
+  
+  data <- nc_open(data)
+  
+  #longitude
+  lon <- ncvar_get(data, "xi", verbose = F)
+  
+  #latitude
+  lat <- ncvar_get(data, "yi", verbose = F)
+  
+  #thermal habitat projection
+  z <- ncvar_get(data, "zi")
+  
+  #combine in data.frame
+  proj <- data.frame(lon = lon,
+                     lat = lat,
+                     z = z)
+  
+  proj <- proj %>% filter(z != "NA",z>0) %>% 
+    mutate(z = plyr::mapvalues(z, from = (z[(z>z.max)]), to = rep(z.max,length(z[(z>z.max)]))))
+  
+  #turn dataframe to raster
+  coordinates(proj) = ~lon+lat
+  proj4string(proj)=map.crs # set it to lat-long
+  proj = spTransform(proj,map.crs)
+  proj <- proj[strata,]
+  gridded(proj) = TRUE
+  r = raster(proj)
+  projection(r) = map.crs
+  
+  colors <- matlab.like(120)
+  #plot maps
+  if (legend == T){
+    plot(r, col=colors, ylim=c(35,45),
+         breaks=seq(0,z.max,length.out=length(colors)),
+         zlim = c(0,z.max),
+         legend.width = 2,
+         axes=F, interpolate = T, las = 1,box = T,
+         axis.args=list(at=seq(0, z.max, length.out = 5),
+                        labels=round(seq(0,1,length.out = 5),1), 
+                        cex.axis=0.8),
+         legend.args=list(text=expression(paste("     Thermal \n      Habitat")),
+                          side=3, font=2, line=1, cex=.65))
+  } else {
+    plot(r, col=colors, ylim=c(35,45),
+         breaks=seq(0,z.max,length.out=length(colors)),
+         axes=F, interpolate = F, las = 1,box = T,legend = F)
+  }
+  
+  
+  map("worldHires", xlim=c(-77,-65),ylim=c(35,45), fill=T,border=0,col="gray", add = T)
+  
+  if (y.axis == T){
+    map.axes(cex.axis = .7)
+  } else if (y.axis == F){
+    axis(1,cex = .7)
+    box(lty = 'solid', col = 'black',lwd = 1)
+  }
+  
+  
+  contour(th,drawlabels = F,nlevels = 2,add=T, col = "gray20",lty=2, lwd = .5)
+  text(-75.5, 43.9, letter,cex = 1.5)
+  
+}
+
+
+```
+
+#Introduction
+
+The purpose of this report is to provide **ecosystem-scale information for fishery managers** to consider along with existing species-scale analyses.  An overview of ecosystem relationships as represented by **a conceptual model helps place more detailed species-level management in context** by highlighting relationships between focal species groups organized by Mid Atlantic Fishery Management Council (MAFMC) Fishery Management Plan (FMP), managed human activities, environmental drivers, habitats, and key ecological links (Fig. \ref{conceptual}). Here, human activities link to high level strategic management objectives. Many components of the conceptual model are represented by indicators in this report, and key paths connecting components and objectives are highlighted.
+
+```{r MAB conceptual, fig.cap="Mid-Atlantic Ecosystem \\label{conceptual}", fig.height=6, fig.width=4, out.width='\\linewidth', fig.align='center', echo = F, message = FALSE, warning = FALSE, fig.pos='H', eval = T}
+knitr::include_graphics(file.path(image.dir, 'SOE_MAB_ConceptMod.png'))
+
+```
+
+\clearpage
+
+# Executive Summary
+
+We have organized this report using a proposed set of **ecosystem-scale objectives** derived from US legislation and current management practices. We report indicators at the spatial scale of either the Mid-Atlantic Bight (MAB; Fig. \ref{map}), for Mid Atlantic states, or Northeast US coastwide where appropriate. Indicator spatial scale is noted in each section heading.
+
+**Table 1**: Mid-Atlantic ecosystem objectives
+```{r obj_cats_MAB, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+| Objective Categories     | Indicators reported here                                  |
+|:-------------------------|:----------------------------------------------------------|
+| Seafood production       | Landings by feeding guild, mariculture                    |
+| Profits                  | Revenue by feeding guild                                  |
+| Recreation               | Number of anglers and trips; recreational catch           |
+| Stability                | Diversity indices (fishery and species)                   |
+| Social-Cultural          | Commercial and recreational reliance; social vulnerability|
+| Biomass                  | Biomass or abundance by feeding guild from surveys        |
+| Productivity             | Condition and recruitment of MAFMC managed species        |
+| Trophic structure        | Relative biomass of feeding guilds, primary productivity  |
+| Habitat                  | Thermal habitat projections, estimated habitat occurrence |
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+```{r map, fig.cap="Mid Atlantic Bight (MAB) spatial extent \\label{map}", fig.height=6, fig.width=4, out.width='0.8\\linewidth', fig.align='center', echo = F, message = FALSE, warning = FALSE, eval = T}
+image_read(file.path(image.dir,"NEshelfEcoRegionsALL.png")) %>%
+image_trim()
+
+```
+
+**We also report single-species status relative to established objectives and reference points**. The Mid Atlantic Council (MAFMC) is meeting objectives at the managed species (stockwide) level for fishing mortality (F) rates for 8 of 15 stocks and biomass (B) levels for 11 of 15 stocks relative to established reference points (Fig. \ref{KOBE}). The exceptions include high F rates for summer flounder and Atlantic mackerel, low B status for Atlantic mackerel, and likely high F rates for blueline tilefish. Three stocks (*Illex* squid, Northern and Southern monkfish) have unknown status for both F and B, blueline tilefish for B, and longfin squid have unknown F status.
+
+```{r, fig.cap="Summary of single species status for MAFMC stocks \\label{KOBE}", fig.height=7, fig.width=7, out.width='0.65\\linewidth', fig.align='center', echo = F, message = FALSE, warning = FALSE, eval = T,fig.pos='H'}
+#knitr::include_graphics(file.path(image.dir, 'MAFMC_joint_stocks_2017.pdf'))
+
+dat <- read.csv(file.path(data.dir, "2017assess.csv"))
+
+stocks <- unique(dat$Entity.Name)
+n.stocks <- length(stocks)
+
+decoder <- read.csv(file.path(data.dir,"2017decoder.csv"))
+# set up the headers for most.recent structure - will contain oldest Assessment.Year
+most.recent <- dat[1,]
+most.recent <- most.recent[-1,]
+
+for (i in 1:n.stocks){
+  temp <- dat[dat$Entity.Name == decoder$Entity.Name[i],]
+  most.recent <- rbind(most.recent,temp[temp$Assessment.Year == max(temp$Assessment.Year),])
+}
+#cbind(n.stocks,length(most.recent[,1]))
+
+# get the max of F.Flimit and F.Fmsy and the max of B.Blimit and B.Bmsy
+Frat <- most.recent$F.Fmsy
+Brat <- most.recent$B.Bmsy
+#Frat[6] <- most.recent$F.Flimit[6]  # Ocean Quahog use Flimit because no Fmsy
+#Frat[18] <- 0.88  # hardwire average of the two GOM models for GOM cod
+#Brat[18] <- 0.155 # hardwire average of the two GOM models for GOM cod
+#model averages have been calculated and included in F/Fmsy column in 2017assess.csv
+#cbind(most.recent$Entity.Name,most.recent$F.Flimit,most.recent$F.Fmsy)
+
+# figure out appropriate range for axes WARNING HARD CODED
+#max(Frat,na.rm=T)
+#max(Brat,na.rm=T)
+x.r <- c(0,3)
+y.r <- c(0,3)
+
+# set some colors
+my.col <- rep(NA,n.stocks)
+MA.col <- "blue"
+NE.col <- "blue"
+BO.col <- "purple"
+for (i in 1:n.stocks){
+  if(decoder$Council[i] == "MAFMC") my.col[i] <- MA.col
+  if(decoder$Council[i] == "NEFMC") my.col[i] <- NE.col
+  if(decoder$Council[i] == "Both")  my.col[i] <- BO.col
+}
+
+# create new matrix for plotting
+xx <- as.data.frame(cbind(decoder[,2:8],Frat,Brat,my.col))
+newlist <- as.factor(decoder$Code)
+others <- as.factor(c("7 Skates", "B. Tilefish"))
+sppcodes <- unlist(list(newlist, others))
+MA.unknown <- sppcodes[c(51,3,4,47,48)] #mackerel, Loligo, Illex, monkfish unknown
+#MA.unknown <- decoder$Code[c(1,3,4,8)] #BSB known
+#NE.unknown <- c(decoder$Code[c(14,23,33)],"7 Skates")
+NE.overfished <- sppcodes[c(17,19)] # GB cod, halibut
+NE.unknown <- sppcodes[c(14,23,33,35,37,47,48,50)] #Red deepsea crab,  Offshore hake, GOM winter flounder, Witch flounder, GB YT,2 monkfish, 7 skates unknown
+
+
+# break out the Councils
+MA <- xx[xx$Council == "MAFMC",]
+NE <- xx[xx$Council == "NEFMC",]
+BO <- xx[xx$Council == "Both",]
+MABO<-rbind(MA, BO)
+NEBO<-rbind(NE, BO)
+
+#if(saveplots) png(file = "MAFMC_joint_stocks_2017.png",  units="in", width = 6, height = 6, res=1200)
+plot(MABO$Brat,MABO$Frat,xlim=x.r,ylim=y.r,xlab="B/Bmsy",ylab="F/Fmsy",pch=16,col=my.col[c(1:11,47:49)])
+  abline(v=0.5,lty=2)
+  abline(v=1,lty=3)
+  abline(h=1,lty=2)
+  title(expression("MAFMC " * phantom("and Joint Stocks")), col.main="blue")
+  title(expression(phantom("MAFMC ") * "and " * phantom("Joint Stocks")), col.main="black")
+  title(expression(phantom("MAFMC and ") * "Joint" * phantom(" Stocks")), col.main="purple")
+  title(expression(phantom("MAFMC and Joint") * " Stocks"), col.main="black")  
+  legend('topright',legend=MA.unknown,pch=NA,text.col=my.col[c(1,3,4,47,48)], title="Unknown Status", title.col = "black")
+  text(MABO$Brat,MABO$Frat,labels=MABO$Code,pos=MABO$my.pos3,col=my.col[c(1:11,47:49)],cex=0.8)
+#if(saveplots) savePlot("MAFMC_Joint_stocks.png", type='png')
+#if(saveplots) dev.off()
+
+#if(saveplots) pdf(file = "NEFMC_joint_stocks.pdf",  width = 6, height = 6)
+#if(saveplots) png(file = "NEFMC_joint_stocks.png",  units="in", width = 6, height = 9, res=1200)
+# plot(NEBO$Brat,NEBO$Frat,xlim=x.r,ylim=y.r,xlab="B/Bmsy",ylab="F/Fmsy",pch=16,col=my.col[12:49])
+#    abline(v=0.5,lty=2)
+#    abline(v=1,lty=3)
+#    abline(h=1,lty=2)
+#    title(expression("NEFMC " * phantom("and Joint Stocks")), col.main="blue")
+#    title(expression(phantom("NEFMC ") * "and " * phantom("Joint Stocks")), col.main="black")
+#    title(expression(phantom("NEFMC and ") * "Joint" * phantom(" Stocks")), col.main="purple")
+#    title(expression(phantom("NEFMC and Joint") * " Stocks"), col.main="black")  
+#    legend('topright',legend=NE.overfished,pch=NA,title="Overfished, F \nStatus Unknown",bty="n", text.width=strwidth("Offshore Hake"), inset=c(0,.05))
+#    legend('right',legend=NE.unknown,pch=NA,title="Unknown Status", bty="n")
+#    text(NEBO$Brat,NEBO$Frat,labels=NEBO$Code,pos=NEBO$my.pos3,col=my.col[12:49],cex=0.8)
+#if(saveplots) savePlot("NEFMC_Joint_stocks.png", type='png')
+#if(saveplots) dev.off()
+
+```
+
+
+**Performance against human dimensions objectives is mixed, with declines in seafood production and recreational opportunities but stabilization of fleet numbers and revenue diversity.**  Revenue has seen substantial 
+interannual variability in recent years, driven primarily by increases in prices of benthos (i.e. scallops & clams). Total volume of landings have decreased since at least 2010, with seafood production by both commercial and recreational fisheries declining overall. This corresponds to a stark decrease in recreational fishing effort and participation since 2008, although the number of commercial fleets, and the diversity of revenue generated from those fleets, have been relatively stable in the last few years. The diversity of species revenue, measured at the individual permit level, has also been relatively stable over the past 10 years. However, many communities in the Mid-Atlantic Bight (MAB) that are highly engaged and/or reliant on commercial fishing are socially vulnerable, and **5 of the 6 largest commercial fishing ports in the MAB (in terms of revenue) are heavily dependent on benthic species which are in turn highly vulnerable to climate change.**
+
+**Fisheries are currently meeting objectives with respect to protected species bycatch reduction, but climate and ecosystem changes may upset this balance.** Fisheries interactions with harbor porpoise have decreased due to management measures, but climate driven distribution changes for sea turtles may lead to future fishery interactions and potential regulations. In addition, the most endangered species in the system (North Atlantic right whale) may be declining over the most recent few years after a slow but steady increase. **Ecosystem conditions combined with changing distributions may be contributing to the decline and observed unusual mortality event for right whales in 2017.**
+
+**Biomass of resource species changes seasonally in this dynamic system.**  Survey biomass trends for aggregated trophic groups of resource species differ in the fall and spring. Larval survey data indicates species diversity has increased in the spring, but no similar shift has been witnessed in the fall. At the lowest trophic level, benthos, including commercial shellfish, show long term increases in both seasons. In contrast, piscivores at higher trophic levels have conflicting long term trends depending on the season sampled. Seasonally divergent aggregate trends require further investigation.
+
+**Additional indicators in this report suggest a note of caution for the aggregate productivity of fish species in the region** (fish condition declined and recovered for some species while survey based aggregate "recruitment" has declined overall). These changes in fish productivity may be linked to observed patterns in plankton communities, to changes in habitat, or both.  While there are some long-term productivity trends at the bottom of the food web in the Mid Atlantic, changes in species composition and shifts in seasonal timing may have a greater impact on upper trophic levels. Temperature is increasing in long term sea surface records as well as surface and bottom measurements from surveys. The seasonal temperature signal also shows sustained warming. **Warming waters have impacts on the ecosystem that can be complex due to differential impacts at the species level, including observed shifts in species distribution and changes in productivity as thermal habitats shift.** 
+
+#Changes for 2018
+
+Indicators throughout the report have been updated with the most recent data, and in some cases replaced with more management-relevant indicators based on Council feedback from the 2017 report. In particular, new sections on species-specific habitat status and trends and climate projections of thermal habitat for key species have replaced last year's more general physical environment and climate sections. This report draws on a wider range of expertise and attempts to further link information across indicators to give an integrated overview of ecosystem status relevant to fishery management decision making.
+
+Many metrics aggregate species by similar functional groups.  Species that comprise the functional groups are listed below. Relative to the 2017 report, these categories have been aggregated into fewer groups for simplification and clarity.
+
+**Table 2**: Mid-Atlantic feeding guilds.
+```{r species_groupings_MAB, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+| Group             | N species | Major species in the group       |
+|:------------------|:-------|:--------------------------------------------|
+| A: **Apex predator** (Highest trophic level)   |  4  | shark (Unc.), swordfish, yellowfin and bluefin tuna |
+| B: **Piscivore** (Eat fish)                    |  23 | spiny dogfish, summer flounder, bluefish, striped bass, weakfish, monkfish, winter and thorny skates, silver and offshore hake, Atlantic cod and halibut, fourspot flounder |
+| C: **Planktivore** (Eat plankton)              |  16 | Atlantic and blueback herring, alewife, shad, menhaden, cusk, Atlantic mackerel, butterfish, blackbelly rosefish, sculpins, lumpfish, northern searobin, northern sand lance, northern shortfin and longfin squid |
+| E: **Benthivore** (Eat bottom dwellers)       |  25 | black sea bass, scup, tilefish, tautog, cunner, blue crab, red crab, lobster, ocean pout, haddock, yellowtail, winter, and witch flounders, barndoor skate, American plaice, other crabs|
+| F: **Benthos**  (Filter feeders)               |  9  |  scallops, surfclam, quahog, mussels, whelks, conchs, sand dollars and urchins |
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+Our assessment of indicator trends has changed this year.  In the 2017 time series plots, monotonic (but not necessarily linear) trends were assessed for both the full time series and the most recent 10 years (shaded dark grey background). Recent simulation analysis suggest that statistical significance tests are unreliable for short time series, but reliable for longer ones. Therefore, similar to 2017, we indicate significant increasing long term trends with orange lines, while significant decreasing long term trends have purple lines.  However, we no longer indicate significant trends for the most recent period but rather discuss recent/current status and trend of each indicator relative to the full time series.  Time series mean is indicated with a dashed line and the final ten years of the time series are highlighted through a grey background. 
+
+# Human Dimensions 
+
+## Seafood production (MAB)
+
+Seafood production is a stated goal of optimal fishery management as part of the definition of "benefits to the nation" under MSA. Both commercial and recreational fishing contributes to seafood production, the latter for personal consumption, and indicators for each of these human activities track management performance against this objective. 
+
+The MAFMC only manages a portion of the total commercial landings that occur in the MAB region.  For example, blue crabs represent a substantial portion of category D (Benthivores) landings. Therefore in 2016, MAFMC accounted for 15% of the Benthivore landings and 12% of the revenue generated from those landings in the MAB. 
+
+**Table 3**: Proportion of landings and revenue derived from managed species in the Mid-Atlantic region. 
+```{r prop_landings_rev_MAB, echo=FALSE, message=FALSE, warnings=FALSE, results='asis'}
+tabl <- "
+| Groups          | MAB Landings| MAB Revenue|
+|:----------------|:------------|:-----------|
+| Piscivore       | 0.16        | 0.50       |
+| Planktivore     | 0.64        | 0.93       |
+| Benthivore      | 0.15        | 0.12       |
+| Benthos         | 0.62        | 0.10       |
+"
+cat(tabl) # output the table in a format good for HTML/PDF/docx conversion
+```
+
+Figure \ref{landings} shows the removals for human consumption of trophic groups including both all species landed in the MAB as well as the subset of those removals managed by the MAFMC.  Landings for managed species are all trending up in recent years, but only Benthivore landings are above the long term-mean. There is a significant decline in MAFMC-managed landings of benthos. We note that time series at the Mid-Atlantic regional scale may not include all state landings prior to 1994. 
+
+```{r seafood_landings_MAB, fig.cap="MAFMC seafood specific landings (red) and total commericial landings (black). A: Apex predators, B: Piscivore, C: Planktivore, D: Benthivore, E: Benthos \\label{landings}",echo = F, warning = F, include = T, fig.asp=0.78, fig.align='center',fig.pos='H', out.width='0.7\\linewidth'}
+
+## Ecosystem-wide and managed species total landings
+opar <- par(mfrow = c(5, 1), mar = c(0, 0, 0, 0), oma = c(4, 6.5, 2, 6))
+
+soe.plot(SOE.data.2018, "Time","Apex Predator Landings MAB", stacked = "A",status = F,
+         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 10^3,end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 )
+
+soe.plot(SOE.data.2018, "Time", "Piscivore Landings MAB", stacked = "B",status = F,
+         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 10^3,end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Piscivore MAFMC managed species sea food MAB")
+
+soe.plot(SOE.data.2018, "Time", "Planktivore Landings MAB", stacked = "C",status = F,
+         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 10^3,end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Planktivore MAFMC managed species sea food MAB")
+
+soe.plot(SOE.data.2018, "Time", "Benthivore Landings MAB", stacked = "D",status = F,
+         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 10^3,end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Benthivore MAFMC managed species sea food MAB")
+
+soe.plot(SOE.data.2018, "Time", "Benthos Landings MAB", stacked = "E",status = F,
+         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 10^3,end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Benthos MAFMC managed species sea food MAB")
+
+soe.stacked.axis("Year", expression("Landings, 10"^3*"metric tons"), x.line = 2.7)
+
+```
+
+Total commercial seafood landings from all species and from MAFMC managed species in teh MAB indicate total seafood production. Years prior to 1977 included foreign landings, so we begin the time series in 1986. Recent landings are all domestic fisheries. Looking across all regions, there is a significant recent decrease in seafood landings, indicating high risk to regional domestic seafood production. 
+
+
+```{r managed_landings , fig.cap="Total commercial seafood landings (black), MAFMC managed seafood landings (red)", echo=F, message=FALSE, warning=FALSE , fig.asp=0.35, fig.align = 'center',fig.pos='H'}
+
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Total Landings MAB", rel.y.text = 1, 
+         rel.y.num = 1.1, scale.axis = 10^3, end.start = 2007, x.start = 1986,
+         ymin = FALSE, y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Total managed landings MAB", x.label = 'Year', y.line = 2.7,
+         y.label = expression('Landings, 10'^3 * 'metric tons'))
+
+```
+
+Recreational seafood landings (as opposed to total landings which include catch and release that are captured under other risk elements/indicators) were used to assess food use of recreationally caught fish in the Mid-Atlantic.
+
+
+```{r rec_catch_MAB, fig.cap="Total recreational harvest  \\label{recfood}", echo = F, message=F, include=T, warning=F, fig.asp=0.35, fig.align = 'center',fig.pos='H'}
+
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Recreational Seafood MA", scale.axis = 10^6,
+         end.start = 2008, x.label = 'Year', rel.y.text = 1.5, rel.y.num = 1.1,
+         y.line = 2.5, y.label = expression("Fish caught, 10"^6 *" n"))
+```
+
+## Commercial Fishery Revenue (MAB)
+
+This indicator links the human activity of commercial fishing to the profits objective. This year we present the "Bennet Indicator" which attributes changes in revenue to the combination of changes in price and changes in landings volume for each species. Prior to 2000, revenue was generally negative compared to average (Fig. \ref{Bennet}). In most years prior to 2000, this was caused by lower prices. After 2000, there were periods of positive and negative revenue gain. Prices were generally positive after the year 2000. Between 1990 and 2000, prices for all feeding guild groups were negative compared to the average (Fig. \ref{Bennetspp}A).  After the year 2000, increases in prices for the benthos group contributed the most to revenue increases, while the Benthivore group had both years of positive and negative contribution to revenue gain. Between 1990 and 2005 there were positive volumes for most feeding guilds (Fig. \ref{Bennetspp}B). After 2005, volumes were usually negative caused mainly by declines in the benthos and Benthivore groups.
+
+```{r 'Rev_Price_Vol_MAB', fig.cap="Bennet indicator, all species aggregated \\label{Bennet}", echo = F, out.width = "450pt", fig.align='center',fig.pos='H'}
+knitr::include_graphics(file.path(image.dir, 'Rev_Price_Vol_MAB.png'))
+
+```
+
+
+
+```{r 'price_ind_MAB',fig.cap="Bennet indicator, (A) price component and (B) volume component by functional group\\label{Bennetspp}" , fig.width = 8,fig.height = 2.75, fig.show='hold',fig.pos='H'}
+price_ind<-readPNG(file.path(image.dir,"price_ind_MAB.png"))
+vol_ind<-readPNG(file.path(image.dir,"vol_ind_MAB.png"))
+
+par(mar=c(0,0,0,0), xpd=NA, mgp=c(0,0,0), oma=c(0,0,0,0), ann=F, mfrow = c(1,2))
+plot.new()
+
+usr<-par("usr")
+
+#fill plot with images
+rasterImage(price_ind, usr[1], usr[3], usr[2], usr[4], interpolate=T)
+rasterImage(vol_ind, usr[1]+1.1, usr[3], usr[2]+1.1, usr[4])
+
+#Add text
+text(.12,.825, "A", cex=1.5)
+text(1.22,.825, "B", cex=1.5)
+```
+
+<!--
+```{r 'vol_ind_MAB' , echo = F, out.width = "450pt", fig.align='center'}
+knitr::include_graphics(file.path(image.dir, 'vol_ind_MAB.png'))
+```
+\newpage
+-->
+
+## Ecosystem-wide and Managed Species Total Revenue (MAB)
+Average total revenue from MAFMC managed species ranges from 17-21% of total revenue from commercial fishing in the Mid Atlantic region over the last 5 years (Fig. \ref{totcommrev}).
+
+```{r managed_revenue , fig.cap="Total revenue by region and MAFMC managed species\\label{totcommrev}", echo = F, message=F, include=T, warning=F ,  fig.asp=0.35, fig.align = 'center',fig.pos='H'}
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Total Revenue MAB", rel.y.num = 1.1,  
+         scale.axis = 10^6, end.start = 2007, x.start = 1986, ymin = FALSE, 
+         y.lower = 0 , extra = TRUE, x.var2 = "Time", 
+         y.var2 = "Total managed revenue MAB", x.label = 'Year', 
+         y.label = expression("Revenue, 10"^6*'USD'), rel.y.text = 1)
+```
+
+## Commercial Fleet Diversity (coastwide, Mid Atlantic permits)
+
+Maintaining diversity can provide the capacity to adapt to change at the ecosystem level for dependent fishing communities, and can address objectives related to stability. Diversity estimates have been developed for fleets and species landed by vessels with Mid-Atlantic permits. A fleet is defined here as the combination of gear code (Scallop Dredge, Other Dredge, Gillnet, Hand Gear, Longline, Bottom Trawl, Midwater Trawl, Pot, Purse Seine, or Clam Dredge) and vessel length category (Less than 30 ft, 30 to 50 ft, 50 to 75 feet, 75 ft and above). The metric presented assesses the diversity of the overarching fleet, in terms of all revenue generated. 
+
+A declining trend in diversity indicates reliance on either a smaller number of resources, or a less diverse pool of resources but cannot distinguish whether specialization (by choice), or alternatively stovepiping (constrained choices), is occurring in the Northeastern Large Marine Ecosystem. 
+
+The number of fleets in the Mid-Atlantic seems to be negatively correlated to the revenue diversity metric in the most recent five years, which indicates that the latter results are being dominated by changes in the distribution of revenue across fleets, as opposed to the number of active fleets.
+
+```{r fleet diversity MAB, fig.cap="(A) Fleet diversity and (B) fleet count\\label{commdiv}", echo=F, message=FALSE, warning=FALSE, include=T, fig.asp=0.5, fig.align = 'center',fig.pos='H'}
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Mid-Atlantic average fleet diversity", stacked = "A",
+         rel.y.num = 0.9, end.start = 2008, tol = 0.15, full.trend = F, website = F, cex.stacked = 1.5)
+soe.stacked.axis('Year', 'Fleet diversity', y.line = 2.5, outer = F,
+                 rel.x.text = 1, rel.y.text = 1.25)
+soe.plot(SOE.data.2018,"Time", "Mid-Atlantic fleet count", stacked = "B",
+         rel.y.num = 0.9, end.start = 2008, full.trend = F, website = F, cex.stacked = 1.5)
+
+soe.stacked.axis('Year', 'Fleet count', y.line = 2.5, outer = F,
+                 rel.x.text = 1, rel.y.text = 1.25)
+
+```
+
+Another diversity index is the average effective Shannon index for species revenue at the permit level, for all permits landing any amount of MAFMC FMP species within a year (including both Monkfish and Spiny Dogfish). Although the exact value of the effective Shannon index is relatively uninformative, the major change in diversity seems to have occurred in the late 1990's, with much of the recent index relatively stable.
+
+<!--This trend contrasts with the species diversity trends from survey data presented below, which indicate relatively low diversity during the mid1990's and higher diversity now (with a significantly increasing recent trend in the spring survey data). Ultimately diversity can be measured in numerous ways (for example, in numbers of vessels in each fleet component as opposed to revenue) and feedback from the Council as to how this should be defined is welcomed.--> 
+
+```{r revenue diversity MAB, fig.cap="Diversity in species revenue\\label{revdiv}", echo = F, message=F, include=T, warning=F,  fig.asp=0.5, fig.align = 'center',fig.pos='H'}
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, 'Time', "Mid-Atlantic commercial species diversity", 
+         end.start = 2008, x.label = 'Year', y.label = 'Shannon Index', 
+         rel.y.text = 1.35, rel.y.num = 1, y.line = 2.5, x.line = 2, full.trend = F)
+```
+
+## Recreational Opportunities (Mid Atlantic states)
+
+Providing recreational opportunities is a stated goal of optimal fishery management as part of the definition of "benefits to the nation" under MSA. Recreational fishing is important in the Mid-Atlantic region with many coastal communities having high recreational dependence. Although there is an overall trend of increasing recreational fishery participation in terms of number of anglers, the most recent 10 years has shown a striking decline in both recreation indices. 
+
+```{r recreation MAB, fig.cap="(A) Number of anglers and (B) number of trips", echo=F, message=FALSE, warning=FALSE, include=T,  fig.asp=0.5, fig.align = 'center',fig.pos='H'}
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Mid-Atlantic Rec participation", stacked = "A",
+         rel.y.num = 0.9, scale.axis = 10^6, end.start = 2007, tol = 0.15,
+         y.lower = 0, ymin = F, website = F, cex.stacked = 1.25)
+soe.stacked.axis('Year', expression('Anglers, 10'^6*'n'), 
+                 rel.x.text = 1, rel.y.text = 1.2, y.line = 2.5, outer = F)
+soe.plot(SOE.data.2018, "Time", "Mid-Atlantic angler trips", stacked = "B",
+         rel.y.num = 0.9, scale.axis = 10^6, x.end = 2016, end.start = 2007,
+         tol = 0.15, y.lower = 0, ymin = F, website = F, cex.stacked = 1.25)
+
+soe.stacked.axis('Year', expression('Trips, 10'^6*'n'), 
+                 rel.x.text = 1, rel.y.text = 1.2, y.line = 2.5, outer = F)
+```
+
+## Mariculture (Mid Atlantic states)
+
+Aquaculture indicators address both seafood production and possibly habitat objectives in that planted bivalves such as oysters provide both habitat structure and contribute locally to improved water quality at high densities. Individual states collect and report aquaculture data by surveying commercial farmers, and at this time, data in the Mid-Atlantic are available for Virginia, Maryland, and New Jersey. From the reported data, Virginia is the largest producer of oysters, although oyster aquaculture is increasing overall throughout the Mid-Atlantic. Hard-clam production data from Virginia show no changes in overall trend. 
+
+```{r, mariculture MAB, fig.cap="Oyster aquaculture production in terms of number of oysters sold from Virginia, Maryland, and New Jersey.",echo = F, warning = F, include = T,fig.asp=0.5, fig.align='center',fig.pos='H'}
+library(RColorBrewer)
+topo <- c('black', "indianred", "darkorange")
+
+oyst_vars <- list("aquaculture NJ gear raised oysters sold",
+                 # "aquaculture NH oyster harvest N",
+                  "aquaculture MD oyster harvest N",
+                 # "aquaculture RI oyster harvest N",
+                  "aquaculture VA oyster harvest N")
+y.min <- 1
+y.max <- 40000000
+opar <- par(mar = c(4, 6, 2, 6))
+plot(NULL, xlim = c(2005, 2017),
+     ylim = c(y.min,y.max), xlab = '', ylab = '', yaxt = "n",ty = 'n',
+     cex.lab=1, las = 1, cex.axis = 1)
+
+for (i in 1:length(oyst_vars)){
+
+  ts <- SOE.data.2018[SOE.data.2018$Var == oyst_vars[[i]],]$Value
+  years <- SOE.data.2018[SOE.data.2018$Var == oyst_vars[[i]],]$Time
+  
+  ts_oyster <- zoo(ts, years)
+  points(ts_oyster, type = "o", lwd = 3, col = topo[i])
+}
+
+mtext(1, text = 'Year', line = 2)
+mtext(2, text = expression("Oysters Harvested, 10"^6*'n'), line = 2.5)
+  axis(2, at = c(1*10^6,5*10^6,10*10^6,15*10^6,
+                 20*10^6,25*10^6,30*10^6,35*10^6,40*10^6), 
+       labels = c("1","5","10","15","20",
+                  "25","30","35","40"),
+       las = 1, cex.axis = 1)
+legend(2006, 4000, 10000, legend = c("New Jersey",
+                            "Maryland",
+                            "Virginia"), col = topo, bty = "n",lwd = 2)
+
+```
+
+## Harmful Algal Blooms (Chesapeake Bay)
+
+Harmful algal bloom (HAB) data on the continental shelf of the Mid-Atlantic region is sparse. In the lower Chesapeake Bay, annual blooms of the dinoflagellate *Cochlodinium polykrikoides* have been observed for several decades and more recently, blooms of *Alexandrium monilatum*, a toxin-producing dinoflagellate common to the Gulf of Mexico, have invaded the region. Both dinoflagellate species have been associated with fish kills either directly or indirectly, the latter due to the prevalence of hypoxic waters following a bloom. Available data regarding the incidence of algal bloom events in Chesapeake Bay (both harmful and otherwise) show that there has been an increase in the number of reported bloom events within the past three years, with the most notable contributors being *C. polykrikoides* and *A. monilatum*[^1]. Fish exposed to *C. polykrikoides* cell concentrations >300,000 cells per liter will experience near total mortality in as little as 1 hour of exposure. 
+
+Blooms of *C. polykrikoides* and *Auerococcus anophagefferens* (responsible for "brown tides") occur regularly in the Long Island Sound region, with the most extensive and longest-lasting brown tide event ever recorded occurring in 2017. Long Island also has annual blooms of *Alexandrium catenella*, which has become more prevalent over the last few decades, though it was known to exist in the region more than 40 years ago. Blooms of toxic *Dinophysis* species have also been recorded in Long Island for the first time in recent years, though there have not been any official closures by state regulators.
+
+\newpage
+
+```{r hab_MAB, fig.cap="Occurrence of all blooms at concentrations warranting action by the Virginia Department of Health (5e6 cells per L) (black), and occurrence of \\textit{C. polykrikoides} in Chesapeake Bay at cell concentrations >3e5 cells per L (red).", echo = F, warning = F, include = T,fig.asp=0.5, fig.align='center',fig.pos='H'}
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "All blooms > 5000 cpl", mean_line = F, rel.y.num = 1.1, 
+         full.trend = F, end.start = NA, ymin = FALSE, y.lower = 0, extra = TRUE, 
+         x.var2 = "Time", y.var2 = "C. polykrikoides blooms > 300 cpl", mean_line.2 = F,
+         x.label = 'Year', y.label = 'Algal Bloom Events, n', rel.y.text = 1, y.line = 2.5)
+```
+
+[^1]: Harmful algal bloom indicator updated to reflect missing data (9/10/2018).
+
+##Community social vulnerability, engagement and dependence on commercial fisheries (Mid Atlantic states)
+
+The NOAA Fisheries Community Social Vulnerability Indicators (CSVIs) are statistical measures of the vulnerability of communities to events such as regulatory changes to fisheries, wind farms, and other ocean-based businesses, as well as to natural hazards, disasters, and climate change. The CSVIs currently serve as indicators of social vulnerability, gentrification pressure vulnerability, commercial and recreational fishing reliance and engagement, sea level rise risk, species vulnerability to climate change, and catch composition diversity.
+
+Here, we look at the extent to which commercial and recreational fishing reliance intersect with community social vulnerability in the Mid-Atlantic region. Commercial fishing reliance is a measure of per capita pounds landed, value landed, commercial permits and commercial dealers in a community.  Recreational reliance is a per capita measure of shore, private vessel and for-hire recreational fishing in a community. Social vulnerability represents social factors that can shape either an individual or community's ability to adapt to change. There are many socially vulnerable communities in the Mid-Atlantic region, but with varying degrees of commercial and/or recreational fishing reliance. While there are some communities that are both moderate to highly socially vulnerable and moderate to highly reliant on commercial fishing  (Fig.\ref{commvulmap}) there are many more communities that are both moderate to highly vulnerable and moderate to highly reliant on recreational fishing (Fig. \ref{commvulmap}) primarily in New Jersey and New York.  
+
+\newpage
+
+
+```{r 'commercial_reliance_and_vulnerability_MAB' , fig.cap="Commercial (A) and recreational (B) reliance and social vulnerability (MAB) \\label{commvulmap}",echo = F, message=F, include=T, warning=F, fig.show='hold', fig.width = 8,fig.height = 5.4,strip.white=T,fig.pos='H'}
+par(mfrow=c(1,2), mar = c(2,2.85,1,1))
+if(map_figs){
+  if (!printer_friendly){
+  
+
+
+cat1 <- SOE.data.2018[SOE.data.2018$Var == "social vulnerability MAB",]$Value
+cat2 <- SOE.data.2018[SOE.data.2018$Var == "commercial reliance MAB",]$Value
+
+#group data into categories
+ncat1 <- NULL
+for (i in 1:length(cat1)){
+  if (cat1[i] > 2){
+    ncat1[i] <- "C"
+  } else if ((cat1[i] <= 2) & (cat1[i] > 1)){
+    ncat1[i] <- "B"
+  } else {
+    ncat1[i] <- "A"
+  }
+}
+
+ncat2 <- NULL
+for (i in 1:length(cat1)){
+  if (cat2[i] > 2){
+    ncat2[i] <- 3
+  } else if ((cat2[i] <= 2) & (cat2[i] > 1)){
+    ncat2[i] <- 2
+  } else {
+    ncat2[i] <- 1
+  }
+}
+
+
+cat3 <- paste0(ncat1, ncat2)
+cat3 <- factor(cat3, levels = c("A1","A2","A3",
+                                "B1","B2","B3",
+                                "C1","C2","C3"),
+               ordered = TRUE)
+lon <- SOE.data.2018[SOE.data.2018$Var == "choropleth longitude MAB",]$Value
+lat <- SOE.data.2018[SOE.data.2018$Var == "choropleth latitude MAB",]$Value
+
+#new dataframe to turn into sp object
+mab.dat <- data.frame(lon = lon,
+                      lat = lat,
+                      cat3 = cat3)
+
+#break up into groups for plotting - allows for effective layering
+g1 <- mab.dat %>% filter(cat3 == "A1"|cat3 == "A2"|cat3 == "A3") %>% arrange(cat3)
+g2 <- mab.dat %>% filter(cat3 == "B1"|cat3 == "B2") %>% arrange(cat3)
+g3 <- mab.dat %>% filter(cat3 == "C1") %>% arrange(cat3)
+
+
+g2_big <- mab.dat %>% filter(cat3 == "B3")
+g3_big <- mab.dat %>% filter(cat3 == "C2"|cat3 == "C3") %>% arrange(cat3)
+
+
+#turn grouped data into sp objects for overlaying on plot of Mid-Atlantic
+
+coordinates(g1) <- ~lon+lat
+g1@proj4string <- map.crs
+g1 <- spTransform(g1, map.crs)
+colo1 <- c(rep("#FFFFFF",table(g1$cat3)[1]),
+           rep("#B8B8FF",table(g1$cat3)[2]),
+           rep("#7F7FFF",table(g1$cat3)[3]))
+
+
+coordinates(g2) <- ~lon+lat
+g2@proj4string <- map.crs
+g2 <- spTransform(g2, map.crs)
+colo2 <- c(rep("#FFB8B8",table(g2$cat3)[4]),rep("#B871B8",table(g2$cat3)[5]))
+
+
+coordinates(g3) <- ~lon+lat
+g3@proj4string <- map.crs
+g3 <- spTransform(g3, map.crs)
+colo3 <- c("#FF7F7F")
+
+
+coordinates(g2_big) <- ~lon+lat
+g2_big@proj4string <- map.crs
+g2_big <- spTransform(g2_big, map.crs)
+
+coordinates(g3_big) <- ~lon+lat
+g3_big@proj4string <- map.crs
+g3_big <- spTransform(g3_big, map.crs)
+
+
+#plot map and dots of different size based on category
+
+plot(coast, xlim = c(-77.5,-71), ylim = c(36.5,41),col = "grey")
+plot(g1, pch = 16, col = colo1,cex = 1, add = T)
+plot(g2, pch = 16, col = colo2,cex = 1, add = T)
+plot(g3, pch = 16, col = colo3,cex = 1,add = T)
+
+
+plot(g2_big, pch = 16, col = "blue",cex = 2, add = T)
+plot(g3_big, pch = 16, col = c(rep("red",table(g3_big$cat3)[8]),rep("black",table(g3_big$cat3)[9])),cex = 2,add = T)
+
+#colors of bivariate color scheme
+base_col <- c("#7F7FFF","blue","black",
+              "#B8B8FF","#B871B8","red",
+              "#FFFFFF","#FFB8B8","#FF7F7F")
+
+#raster image to display on plot as bivariate legend
+r <- raster(xmn = -73.5, xmx = -71.4, ymn = 36, ymx = 37.8, nrows = 3, ncols = 3)
+r[] <- 1:9
+plot(r, col = base_col, legend = F, bty = "n", axes = F, yaxt = "n", frame.plot = F,
+     xaxt='n', add = T)
+
+#text
+text(-73.9, 36.9, "Commercial Reliance",srt=90, cex = .75)
+text(-72.4,35.6, "Social Vulnerability", cex = .75)
+text(-77.1,42, "A", cex = 1.5)
+
+axis(1, at = c(-76,-74,-72), labels = paste( c(-76,-74,-72) * -1, 'W'),pos = 34.7,col = NA, col.ticks = 1)
+axis(2, at = axTicks(2), labels = paste(axTicks(2), 'N'), las = T, pos = -77.8,col = NA, col.ticks = 1)
+box(lty = 1, lwd = 2)
+#text
+
+#####################################################################################################
+
+cat1 <- SOE.data.2018[SOE.data.2018$Var == "social vulnerability MAB",]$Value
+cat2 <- SOE.data.2018[SOE.data.2018$Var == "recreational reliance MAB",]$Value
+
+#group data into categories
+ncat1 <- NULL
+for (i in 1:length(cat1)){
+  if (cat1[i] > 2){
+    ncat1[i] <- "C"
+  } else if ((cat1[i] <= 2) & (cat1[i] > 1)){
+    ncat1[i] <- "B"
+  } else {
+    ncat1[i] <- "A"
+  }
+}
+
+ncat2 <- NULL
+for (i in 1:length(cat1)){
+  if (cat2[i] > 2){
+    ncat2[i] <- 3
+  } else if ((cat2[i] <= 2) & (cat2[i] > 1)){
+    ncat2[i] <- 2
+  } else {
+    ncat2[i] <- 1
+  }
+}
+
+
+cat3 <- paste0(ncat1, ncat2)
+cat3 <- factor(cat3, levels = c("A1","A2","A3",
+                                "B1","B2","B3",
+                                "C1","C2","C3"),
+               ordered = TRUE)
+lon <- SOE.data.2018[SOE.data.2018$Var == "choropleth longitude MAB",]$Value
+lat <- SOE.data.2018[SOE.data.2018$Var == "choropleth latitude MAB",]$Value
+
+#new dataframe to turn into sp object
+mab.dat <- data.frame(lon = lon,
+                      lat = lat,
+                      cat3 = cat3)
+
+#break up into groups for plotting - allows for effective layering
+g1 <- mab.dat %>% filter(cat3 == "A1"|cat3 == "A2"|cat3 == "A3") %>% arrange(cat3)
+g2 <- mab.dat %>% filter(cat3 == "B1"|cat3 == "B2") %>% arrange(cat3)
+g3 <- mab.dat %>% filter(cat3 == "C1") %>% arrange(cat3)
+
+
+g2_big <- mab.dat %>% filter(cat3 == "B3")
+g3_big <- mab.dat %>% filter(cat3 == "C2"|cat3 == "C3") %>% arrange(cat3)
+
+
+#turn grouped data into sp objects for overlaying on plot of Mid-Atlantic
+
+coordinates(g1) <- ~lon+lat
+g1@proj4string <- map.crs
+g1 <- spTransform(g1, map.crs)
+colo1 <- c(rep("#FFFFFF",table(g1$cat3)[1]),
+           rep("#B8B8FF",table(g1$cat3)[2]),
+           rep("#7F7FFF",table(g1$cat3)[3]))
+
+
+coordinates(g2) <- ~lon+lat
+g2@proj4string <- map.crs
+g2 <- spTransform(g2, map.crs)
+colo2 <- c(rep("#FFB8B8",table(g2$cat3)[4]),rep("#B871B8",table(g2$cat3)[5]))
+
+
+coordinates(g3) <- ~lon+lat
+g3@proj4string <- map.crs
+g3 <- spTransform(g3, map.crs)
+colo3 <- c("#FF7F7F")
+
+
+coordinates(g2_big) <- ~lon+lat
+g2_big@proj4string <- map.crs
+g2_big <- spTransform(g2_big, map.crs)
+
+coordinates(g3_big) <- ~lon+lat
+g3_big@proj4string <- map.crs
+g3_big <- spTransform(g3_big, map.crs)
+
+
+#plot map and dots of different size based on category
+
+plot(coast, xlim = c(-77.5,-71), ylim = c(36.5,41),col = "grey")
+plot(g1, pch = 16, col = colo1,cex = 1, add = T)
+plot(g2, pch = 16, col = colo2,cex = 1, add = T)
+plot(g3, pch = 16, col = colo3,cex = 1,add = T)
+
+
+plot(g2_big, pch = 16, col = "blue",cex = 2, add = T)
+plot(g3_big, pch = 16, col = c(rep("red",table(g3_big$cat3)[8]),rep("black",table(g3_big$cat3)[9])),cex = 2,add = T)
+
+#colors of bivariate color scheme
+base_col <- c("#7F7FFF","blue","black",
+              "#B8B8FF","#B871B8","red",
+              "#FFFFFF","#FFB8B8","#FF7F7F")
+
+#raster image to display on plot as bivariate legend
+r <- raster(xmn = -73.5, xmx = -71.4, ymn = 36, ymx = 37.8, nrows = 3, ncols = 3)
+r[] <- 1:9
+plot(r, col = base_col, legend = F, bty = "n", axes = F, yaxt = "n", frame.plot = F,
+     xaxt='n', add = T)
+axis(1, at = c(-76,-74,-72), labels = paste( c(-76,-74,-72) * -1, 'W'),pos = 34.7,col = NA, col.ticks = 1)
+axis(2, at = axTicks(2), labels = paste(axTicks(2), 'N'), las = T, pos = -77.8,col = NA, col.ticks = 1)
+box(lty = 1, lwd = 2)
+#text
+text(-73.9, 36.9, "Recreational Reliance",srt=90, cex = .75)
+text(-72.4,35.6, "Social Vulnerability", cex = .75)
+text(-77.1,42, "B", cex = 1.5)
+
+
+  }
+
+}
+
+```
+
+```{r comm_reliance_and_vuln_MAB_pf, echo=F,fig.cap="Commercial (A) and recreational (B) reliance and social vulnerability (MAB) \\label{commvulmap}", fig.width=8, fig.height=6.2, fig.pos='H', fig.show='hold', message=FALSE, warning=F,fig.align='center',out.extra='trim={1cm 2.45cm 0cm 0cm},clip'}
+if(map_figs){
+  if (printer_friendly){
+  crv_map <- suppressWarnings(readPNG(file.path(image.dir, "commercial_reliance_and_vulnerability MAB.png"), info = F))
+usr<-par("usr")
+plot.new()
+rasterImage(crv_map, usr[1], usr[3], usr[2], usr[4])
+
+  }
+}
+```
+##Climate Vulnerability of Coastal Fishing Communities (Mid Atlantic states)
+
+Six key Mid-Atlantic fishing communities were evaluated for their dependence on species vulnerable to climate change and catch composition diversity (Fig. \ref{sppvul}). Five of the six communities had a majority of revenue from species highly vulnerable to climate change.
+
+
+```{r 'species_vulnerability_MAB' , fig.cap="Species vulnerability in Mid-Atlantic fishing communities \\label{sppvul}", echo = F, out.width = "450pt", fig.align='center', eval = T,fig.pos='H'}
+knitr::include_graphics(file.path(image.dir, 'Sp_vulnerability_MAB.jpg'))
+```
+
+# Protected species-fishery interactions
+
+Protected species include marine mammals (under the Marine Mammal Protection Act), Endangered and Threatened species (under the Endangered Species Act), and migratory birds (under the Migratory Bird Treaty Act). In the Northeast US, endangered/threatened species include Atlantic salmon, Atlantic and shortnose sturgeon, all sea turtle species, and 5 baleen whales. Fishery management objectives for protected species generally focus on reducing interactions between resource and protected species; here we report on the current status of these interactions as well as indicating the potential for future interactions driven by observed and predicted ecosystem changes in the Mid-Atlantic region. 
+
+## Harbor porpoise (coastwide)
+Harbor porpoise bycatch has resulted in fisheries closures in the past, but current bycatch levels demonstrate that management measures have been effective, reducing this fishery interaction. The 5-year mean bycatch has been below the maximum permitted level (Potential Biological Removal, PBR) since 2011 (Fig. \ref{harbporp}), and the most recent annual bycatch estimate is one of the lowest in the time series. Increased compliance and reduced fishing effort are thought to contribute to low bycatch estimates. There should be an updated harbor porpoise abundance estimate this year. Recent analyses have examined regional harbor porpoise diet, however, the impact of ecosystem changes on bycatch, population, or distribution remain unclear.
+
+```{r harbor_porpoise, fig.cap="Harbor porpoise bycatch estimated compared with PBR \\label{harbporp}", echo = F, message=F, include=T, warning=F, fig.width=6,fig.height=2.5, fig.align = 'center',fig.pos='H',out.extra='trim={0cm 0.5cm 0cm 0cm}'}
+opar <- par(mar = c(4, 6, 2, 6))
+#Harbor porpoise bycatch - Dropped mean line for clarity
+soe.plot(SOE.data.2018, 'Time', "Harbor porpoise bycatch estimates",            
+         rel.y.num = 1.2, end.start = 2007, full.trend = F, point.cex = 1,
+         ymax = F, y.upper = 2500, mean_line = F, x.label = 'Year',
+         y.label = 'Harbor Porpoise Bycatch, n', rel.y.text = 1.25)
+
+legend(2000, 2250, legend = "Potential Biological Removal", col = adjustcolor("red", .5), lwd = 3,
+       bty = "n", cex = 1)
+
+#credible intervals and PBI
+lw_CI <- SOE.data.2018[Var == 'Harbor porpoise bycatch 2.5 CI',  list(Time, Value)]
+up_CI <- SOE.data.2018[Var == 'Harbor porpoise bycatch 97.5 CI', list(Time, Value)]
+pbi   <- SOE.data.2018[Var == 'Harbor porpoise potential biological removal', list(Time, Value)]
+
+points(pbi,   type  = "l", lty = 1, col = adjustcolor("red", .5), lwd = 3)
+points(lw_CI, type  = "l", lty = 2, col = adjustcolor("darkorange", .9), lwd = 2.5)
+points(up_CI, type  = "l", lty = 2, col = adjustcolor("darkorange", .9), lwd = 2.5)
+```
+
+## Sea Turtles (coastwide)
+Sea turtles are known to be susceptible to climate and ecosystem changes, and their distribution is influenced by water temperature. Sea turtle diets contain a considerable amount of  gelatinous zooplankton, which are also influenced by changes in the pelagic ecosystem. At present, management measures to reduce sea turtle-fishery interactions are limited to the regions with historical observations of sea turtles and based on historical ocean temperature distributions. However, changes in climate may cause turtles to shift northward into areas with heavy fishing, possibly resulting in increased bycatch, and necessitating new management measures. 
+
+## Right whale (coastwide)
+North Atlantic right whales are among the most endangered large whale populations in the world. Changes in right whale trends can have implications for fisheries management where fisheries interact with these whales. Additional management restrictions could have a large impact on fishing times, gears, etc.
+
+Although the population increased steadily from 1990 to 2011, it has decreased recently. From Pace et al 2017: "The probability that the population's trajectory post-2010 was a decline was estimated at 99.99%." Reduced survival rates of adult females and diverging abundance trends between sexes have also been observed. Further, right whale distribution has changed since 2010. The reasons for these changes is unclear, but changes in climate and primary prey (Calanus finmarchicus) are suspected. Not yet reflected in this trend are the 17 right whale deaths observed in 2017, 5 due to vessel strike (1 in US waters, 4 in Canadian waters), 3 from entanglement (2 in Canadian gear, 1 in unknown gear), and the rest from unknown causes. 
+
+```{r rw_abundance, fig.cap="Right whale population estimate\\label{rightwh}",echo = F, message=F, include=T, warning=F, fig.align = 'center', fig.pos='H', fig.width=6,fig.height=2.5,out.extra='trim={0cm 0.5cm 0cm 0cm}'}
+opar <- par(mar = c(4, 6, 2, 6))
+
+soe.plot(SOE.data.2018, 'Time', "right_whale_median", rel.y.num = 1.2, 
+         full.trend = F, lwd = 1.5, point.cex = 1, end.start = 2007,
+         x.label = 'Year', y.label = 'Median Right Whale \nAbundance, n', 
+         rel.y.text = 1.35)
+
+lw_CI <- SOE.data.2018[Var == 'right_whale_lower_95', list(Time, Value)]
+up_CI <- SOE.data.2018[Var == 'right_whale_upper_95', list(Time, Value)]
+points(lw_CI, type  = "l", lty = 2, col = adjustcolor("darkorange", .6), lwd = 2.5)
+points(up_CI, type  = "l", lty = 2, col = adjustcolor("darkorange", .6), lwd = 2.5)
+
+```
+
+# Resource Species
+
+Patterns for groups of species that feed on similar prey can indicate how overall ecosystem conditions are changing, and provide context for individual species stock assessments. This information is from NEFSC bottom trawl surveys in spring and fall. We note that the Mid-Atlantic region was not sampled by the 2017 fall bottom trawl survey due to vessel repairs so the fall time series have not changed from the 2017 report. 
+
+## Trends in Biomass (MAB)
+
+Biomass across trophic levels shows different trends between the fall and spring NEFSC trawl surveys in the MAB, with no groups having similar significant trends across seasons. At the lowest trophic level, benthos, including commercial shellfish, show long term increases in fall, but not a significant trend in spring. In contrast, piscivores at higher trophic levels have conflicting long term trends depending on the season sampled, decreasing in fall and increasing in spring. 
+
+```{r fall_survey_MAB, fig.cap="Fall (left) and spring (right) MAB Survey Biomass (A: Piscivore, B: Planktivore, C: Benthivore, D: Benthos)",  echo = F, fig.show='hold', fig.align='default',out.width='.49\\linewidth',warning = F, message = F,fig.pos='H'}
+
+opar <- par(mfrow = c(4, 1), mar = c(0, 0, 0, 0), oma = c(4, 6.5, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Piscivore Fall Biomass Index MAB", 
+         stacked = "A", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Planktivore Fall Biomass Index MAB", 
+         stacked = "B", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Benthivore Fall Biomass Index MAB", 
+         stacked = "C", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Benthos Fall Biomass Index MAB", 
+         stacked = "D", rel.y.num = 1.1, end.start = 2007)
+#soe.plot(SOE.data.2018, "Time", "Total Fall Biomass MAB", stacked = "E",status  = F,
+#         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1)
+soe.stacked.axis("Year", expression("Biomass, kg tow"^-1), y.line = 3.0,
+                 x.line = 2.7)
+
+opar <- par(mfrow = c(4, 1), mar = c(0, 0, 0, 0), oma = c(4, 6.5, 2, 6))
+
+soe.plot(SOE.data.2018, "Time", "Piscivore Spring Biomass Index MAB", 
+         stacked = "A", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Planktivore Spring Biomass Index MAB", 
+         stacked = "B", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Benthivore Spring Biomass Index MAB", 
+         stacked = "C", rel.y.num = 1.1, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "Benthos Spring Biomass Index MAB", 
+         stacked = "D", rel.y.num = 1.1, end.start = 2007)
+#soe.plot(SOE.data.2018, "Time", "Total Spring Biomass MAB", stacked = "E",status  = F,
+#         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1)
+soe.stacked.axis("Year", expression("Biomass, kg tow"^-1*''), y.line = 3.0,
+                 x.line = 2.7)
+
+```
+
+Seasonally divergent aggregate biomass trends require further investigation. They could indicate the trends of different fish communities with seasonal differences that are the result of regular seasonal migrations, or they could indicate movement of new species into/out of the region on a seasonal basis, or both. These trends across trophic levels point to the potentially complex and dynamic trophic structure of the Mid-Atlantic ecosystem.
+
+
+<!-- ```{r Spring_survey_MAB, fig.cap="Spring Survey Biomass (MAB) (A: Piscivore, B: Planktivore, C: Benthivore, D: Benthos)", echo = F, warning = F, include = T,out.width='1\\linewidth', fig.width = 6,fig.height=7.5, fig.align='center'} -->
+
+<!-- opar <- par(mfrow = c(4, 1), mar = c(0, 0, 0, 0), oma = c(4, 6.5, 2, 6)) -->
+
+<!-- soe.plot(SOE.data.2018, "Time", "Piscivore Spring Biomass Index MAB", stacked = "A",status  = F, -->
+<!--          endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1) -->
+<!-- soe.plot(SOE.data.2018, "Time", "Planktivore Spring Biomass Index MAB", stacked = "B",status  = F, -->
+<!--          endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1) -->
+<!-- soe.plot(SOE.data.2018, "Time", "Benthivore Spring Biomass Index MAB", stacked = "C",status  = F, -->
+<!--          endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1) -->
+<!-- soe.plot(SOE.data.2018, "Time", "Benthos Spring Biomass Index MAB", stacked = "D",status  = F, -->
+<!--          endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1) -->
+<!-- #soe.plot(SOE.data.2018, "Time", "Total Spring Biomass MAB", stacked = "E",status  = F, -->
+<!-- #         endshade = T, rel.y.num = 1.1, full.trend = T, scale.axis = 1) -->
+<!-- soe.stacked.axis("Time",expression("Biomass, kg tow"^-1*''), outer = T) -->
+<!-- ``` -->
+
+## Species composition (coastwide)
+
+Diversity in species composition mainly addresses objectives related to ecosystem structure and stability; maintaining diversity can provide the capacity to adapt to change at the ecosystem level and for dependent fishing communities. Diversity here is estimated using data from the NOAA NEFSC Oceans and Climate branch public dataset for 45 abundant and well-identified ichthyoplankton taxa, and shows a decrease for one season (spring), suggesting that survey timing may be interacting with changes in spawn timing or migration of adult fish, as well as a potential change in ichthyoplankton availability due to adult fish distribution shifts (see below).  The decrease in spring ichthyoplankton diversity coincides with an increase in the spring abundance of sand lance (*Ammodytes* spp.) larvae, an important prey species.  Researchers documented a significant seasonal shift from winter to spring based on annual relative proportions from 1977-1987 to 1999-2008. 
+
+```{r larval_diversity, fig.cap="Ichthyoplankton Shannon diversity and species counts in the spring (Top row) and fall (bottom row)",echo = F, fig.show='hold', fig.align='default', out.width='.49\\linewidth',warning = F, message = F,fig.pos='H'}
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+
+soe.plot(SOE.data.2018, "Time","Spring_Ich_Shannon Diversity Index", stacked = "A",
+         rel.y.num = 1.1, full.trend = F, end.start = 2006, website = F,cex.stacked = 1.5)
+soe.plot(SOE.data.2018, "Time","Fall_Ich_Shannon Diversity Index", stacked = "B",
+         rel.y.num = 1.1, full.trend = F, end.start = 2006, website = F,cex.stacked = 1.5)
+soe.stacked.axis('Year', 'Shannon Index', y.line = 2.5)
+
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+soe.plot(SOE.data.2018, "Time","larval species count spring", stacked = "C",
+         rel.y.num = 1.1, full.trend = F, suppressAxis = T, end.start = 2006, website = F,cex.stacked = 1.5)
+soe.plot(SOE.data.2018, "Time","larval species count fall", stacked = "D",
+         rel.y.num = 1.1, full.trend = F, end.start = 2006, website = F,cex.stacked = 1.5)
+soe.stacked.axis('Year', 'Species Present, n', y.line = 2.5)
+
+```
+
+## Species distribution (coastwide)
+
+Spatial distribution can change for a variety of different reasons resulting in distributions that have changed over time for some species more than for others. Two species of particular interest to the MAFMC are black sea bass and summer flounder.  Black sea bass distributions measured by NEFSC surveys have shifted northward relative to historical distributions while summer flounder have expanded inshore (Fig. \ref{asd}; Fig. \ref{thermhab}). Recent work looking at multiple factors that are associated with a species' prefered habitat show an increase in potential habitat for both species most notably in the spring (Fig. \ref{occupancy}).  Other work using temperature data from the NEFSC trawl survey developed thermal habitat preference for resource species.
+
+```{r sf_species_distributions_MAB,fig.cap="Black sea bass (left) and summer flounder (right) along shelf distance trends (Top row: spring, bottom row: fall) \\label{asd}", out.width=c('9.5cm','9.5cm'),  echo = F, fig.show='hold', fig.align='default', out.width='.49\\linewidth',warning = F, message = F,fig.pos='H'}
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+
+soe.plot(SOE.data.2018, "Time", "black sea bass spring mean along-shelf dist", 
+         stacked = "A", rel.y.num = 1.1, suppressAxis = T, 
+         line.forward = T, tol = 0.15, x.start = 1963, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "black sea bass fall mean along-shelf dist", 
+         stacked = "B", rel.y.num = 1.1, tol = 0.15, end.start = 2007)
+soe.stacked.axis("Year", "Mean along-shelf distance, km", y.line = 3.0)
+
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+
+soe.plot(SOE.data.2018, "Time", "summer flounder spring mean along-shelf dist", 
+         stacked = "C", rel.y.num = 1.1, suppressAxis = T, 
+         line.forward = T, x.start = 1963, end.start = 2007)
+soe.plot(SOE.data.2018, "Time", "summer flounder fall mean along-shelf dist", 
+         stacked = "D", rel.y.num = 1.1, end.start = 2007)
+soe.stacked.axis("Year", "Mean along-shelf distance, km", y.line = 3.0)
+
+```
+
+
+Thermal habitat for individual species can then be projected using global climate models (Fig. \ref{thermhab}). While thermal habitat is only part of the picture, and species may adapt to new thermal regimes, these projections indicate the potential for key species to thrive or not over the coming decades, where further ocean warming is expected.  Black sea bass thermal habitat is projected to decline, while summer flounder thermal habitat continues to expand and move further offshore in the  MAB. The projections shown here are for fall only, but spring projections are also available.
+
+
+```{r kdes_and_th_maps_MAB,fig.cap="Current and historical abundance estimates (A), current thermal habitat estimate (B), and 20-40 year thermal habitat projection (C) for black sea bass (top) and summer flounder (bottom). \\label{thermhab}" , fig.width = 8,fig.height = 5.5, fig.show='hold',fig.pos='H', warning=F, message=F}
+#fill plot with images
+if(map_figs){
+  if (!printer_friendly){
+kde1 <- readPNG(file.path(image.dir, "black_sea_bass_kde.png"))
+kde2 <- readPNG(file.path(image.dir,"summer_flounder_kde.png"))
+par(mar=c(2.5,2,2,2), xpd=NA, mgp=c(3,1,0), oma=c(0,1,0,0), ann=F, mfrow = c(2,3))
+plot.new()
+usr<-par("usr")
+
+par(mfg=c(1,1))
+rasterImage(kde1, usr[1], usr[3], usr[2], usr[4])
+text(.12,.95, "A", cex=1.5)
+par(mfg=c(2,1))
+rasterImage(kde2, usr[1], usr[3], usr[2], usr[4])
+text(.12,.95, "D", cex=1.5)
+par(mfg=c(1,2))
+th_plot(data = file.path(gis.dir, "Black Sea Bassfall_2.nc"), 
+        letter = "B", z.max = 1.353462, y.axis = T, legend = F, pos = "topleft")
+par(mfg=c(1,3))
+th_plot(data = file.path(gis.dir, "Black Sea Bassfall_4.nc"), 
+        letter = "C", z.max = 1.353462, y.axis = T, legend = T, pos = "topright")
+
+
+par(mfg=c(2,2))
+th_plot(data = file.path(gis.dir, "Summer Flounderfall_2.nc"),
+        letter = "E", z.max = 2.5, y.axis = T, legend = F, pos = "bottomleft")
+par(mfg = c(2,3))
+th_plot(data = file.path(gis.dir,"Summer Flounderfall_4.nc"),
+        letter = "F", z.max = 2.5, y.axis = T, legend = T, pos = "bottomright")
+  
+  }
+  
+}
+
+
+```
+
+```{r kdes_and_th_maps_MAB_pf, echo=F,fig.cap="Current and historical abundance estimates (A), current thermal habitat estimate (B), and 20-40 year thermal habitat projection (C) for black sea bass (top) and summer flounder (bottom). \\label{thermhab}", fig.width=8.55, fig.height=7, fig.pos='H', fig.show='hold', message=FALSE, warning=F,fig.align='center',out.extra='trim={1cm 2.45cm 1cm 1.75cm},clip'}
+if(map_figs){
+  if(printer_friendly){
+
+th_map <- suppressWarnings(readPNG(file.path(image.dir, "kdes_and_th_maps_MAB.png"), info = F))
+usr<-par("usr")
+plot.new()
+rasterImage(th_map, usr[1], usr[3], usr[2], usr[4])
+
+  }
+
+}
+```
+
+
+```{r occupancy_MAB, fig.cap="Summer flounder (left) and black sea bass (right) modeled shelf habitat trends (Top row: spring, bottom row: fall) \\label{occupancy}", out.width=c('9.5cm','9.5cm'),  echo = F, fig.show='hold', fig.align='default', out.width='.49\\linewidth',warning = F, message = F,fig.pos='H'}
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+
+soe.plot(SOE.data.2018, "Time", "summer flounder spring occupancy", stacked = "A",
+         rel.y.num = 1.1, scale.axis = 10^3, end.start = 2007, full.trend = F)
+soe.plot(SOE.data.2018, "Time", "summer flounder fall occupancy", stacked = "B",
+         rel.y.num = 1.1, scale.axis = 10^3, end.start = 2007, full.trend = F)
+soe.stacked.axis("Year", expression("Habitat Area, 10"^3*" km"^2), y.line = 2.5)
+
+opar <- par(mfrow = c(2, 1), mar = c(0, 0, 0, 0), oma = c(3.5, 5, 2, 4))
+
+soe.plot(SOE.data.2018, "Time", "black sea bass spring occupancy", stacked = "C",
+         rel.y.num = 1.1, scale.axis = 10^3, suppressAxis = T, end.start = 2007, full.trend = F)
+soe.plot(SOE.data.2018, "Time", "black sea bass fall occupancy", stacked = "D",
+         rel.y.num = 1.1, scale.axis = 10^3, end.start = 2007, full.trend = F)
+soe.stacked.axis("Year", expression("Habitat Area, 10"^3*" km"^2), y.line = 2.5)
+```
+
+A full suite of the current distribution maps is available at www.nefsc.noaa.gov/ecosys/current-conditions/ kernel-density.html, and all thermal habitat projections can be found at  www.nefsc.noaa.gov/ecosys/climate-change/projected-thermal-habitat/.
+
+### Incoming species (coastwide)
+
+New species may be entering the Mid Atlantic ecosystem. Fishery observer records indicate that southern kingfish sightings have increased since 2014 when species validation methods were implemented, but this increasing trend has been in place since 2010. Further information from fishermen on new and uncommon species is welcome for this report. 
+```{r southern kingfish, fig.cap="Southern kingfish occurrences in the observer database", echo=F,message=FALSE, warning=FALSE ,fig.align='center', fig.asp=.95,fig.width=6,fig.pos='H',out.extra='trim={0cm 2.25cm 0cm 1cm},clip'}
+if(map_figs){
+  if (!printer_friendly){
+    sk.dat <- SOE.data.2018[grepl("Lat",SOE.data.2018$Units) & grepl("Southern Kingfish",SOE.data.2018$Var),]
+lon <- sk.dat[as.numeric(sk.dat$Value) < 0,]$Value
+lat <- sk.dat[as.numeric(sk.dat$Value) > 0,]$Value
+
+#create data.frame
+df <- data.frame(year = sk.dat$Time,
+                 lon = lon,
+                 lat = lat)
+
+#set color palette
+colors1 <- adjustcolor(matlab.like2(8),.5)
+colors2 <- adjustcolor(matlab.like2(8),.5)
+colors3 <- adjustcolor(matlab.like2(8),.5)
+colors4 <- adjustcolor(matlab.like2(8),1)
+colors <- c(colors1[1:2], colors2[3:4], colors3[5:6],colors4[7:8])
+
+#map values to colors
+df <- df %>% arrange(year) %>% mutate(colors = plyr::mapvalues(year, from = c("2010","2011","2012","2013",
+                                                                              "2014","2015","2016","2017"),
+                                                               to = c(colors)))
+colors <- df$colors
+
+
+#projection
+map.crs <- CRS("+proj=longlat +lat_1=35 +lat_2=45 +lat_0=40 +lon_0=-77 +x_0=0
+               +y_0=0 +datum=NAD83 +no_defs +ellps=GRS80 +towgs84=0,0,0")
+
+
+
+#data.frame to sp object
+coordinates(df) <- ~lon+lat
+df@proj4string <- map.crs
+df <- spTransform(df, map.crs)
+
+#plot
+par(fig = c(0,1,0,1))
+plot(coast, xlim = c(-76,-73), ylim = c(35,40.5),col = "grey")
+plot(df, pch = 16, col = colors, add = T, cex = 2.5)
+
+
+occur <- SOE.data.2018[SOE.data.2018$Var == "Southern Kingfish observer sightings",]$Value
+time <- SOE.data.2018[SOE.data.2018$Var == "Southern Kingfish observer sightings",]$Time
+
+ts <- zoo(occur,time)
+par(fig = c(0.5,1, 0.1, .5), new = T, bty = "l",mar = c(5,6,3,1)) 
+barplot(occur,time, col = matlab.like2(8), xlab = c("Time"),ylab = "S. Kingfish Occurrence, n",
+        cex.lab = 1, las = 1, cex.axis = 1)
+axis(1,at = seq(1250,18500,length.out = 8),labels = c("2010","2011","2012","2013",
+                                            "2014","2015","2016","2017"), cex.axis=1)
+  }
+}
+```
+
+```{r southern_kingfish_pf, fig.cap="Southern kingfish occurrences in the observer database", echo=F,fig.show='hold',fig.pos='H',out.extra='trim={0cm 2.25cm 0cm 1cm},clip',fig.align='center', fig.asp=1}
+if(map_figs){
+  if (printer_friendly){
+
+sk_map <- readPNG(file.path(image.dir, "southern_kingfish.png"))
+plot.new()
+usr<-par("usr")
+
+rasterImage(sk_map, usr[1], usr[3], usr[2], usr[4])
+
+  }
+
+}
+```
+# Ecosystem Conditions and Productivity
+
+Productivity of the system can be influenced by many factors.  Temperature affects the behavior and physiology of marine organisms while changes in productivity and species composition at the base of the food web can influence juvenile survival. In this section we report temperature and lower trophic level  production trends and annual cycles for the most recent year.  We also look at fish productivity through recruitment and fish condition.
+
+## Observed ocean conditions
+
+### Long-term ocean temperature (coastwide)
+
+Sea surface temperature (SST) measurements have been collected on the Northeast Continental Shelf since the mid-1800s. The highest mean annual temperature in this time series was recorded in 2012, as the ecosystem warmed above the levels last seen in the late 1940s. The 2017 datum is the sixth highest temperature in the time series. The positive trend over the full time series (1856-2016) is significant, and the trend over the most recent decade of the time series is even greater.
+
+```{r long_term_sst,fig.cap="Long-term sea surface temperatures on the Northeast Continental Shelf",  echo=F, message=FALSE, warning=FALSE , fig.height=2.5, fig.align = 'center',fig.pos='H'}
+opar <- par(mar = c(4, 6, 2, 6))
+soe.plot(SOE.data.2018, "Time", "long term sst", end.start = 2007, 
+         line.forward = TRUE, point.cex = 0.8, rel.y.text = 1.1,
+         x.line = 2, y.line = 2.3, x.label = 'Year', rel.y.num = 1.1,
+         y.label = expression(paste("Mean SST (",degree,"C)")))
+
+```
+
+### Annual cycles (2017) in ocean temperature and primary production (MAB)
+
+The Mid-Atlantic experienced above average sea surface temperatures (SSTs) during 2017. In the figure below, the long term mean SST is shown as a black line with areas representing plus and minus one standard deviation of the mean as a shade of gray. SSTs for 2017 that were above the mean are shown in red and below the mean in blue, with emphasis added when the temperature exceeded or decreased below one standard deviation of the mean. Last winter was characterized by well above average temperatures in the Mid-Atlantic that transitioned to generally moderate conditions during summer. The Bight returned to warm conditions during October and remained above average for the balance of the year[^2].
+
+[^2]: SST anomaly maps and seasonal time series updated to reflect 1982-2012 long-term mean (6/20/2018).
+
+```{r SST_PPD_CHL_MAB, fig.cap="SST (A), primary production (B), and Chl a (C) over 2017 (colored polygons) compared against long-term mean (black line) and +/- 1 standard deviation (grey polygon) in the Mid-Atlantic",echo = F, fig.show='hold', fig.align='default',warning = F, message = F,fig.pos='H',fig.height = 2.75,fig.width = 8}
+## SST
+par(mar = c(4, 4, 2, 1), mfrow = c(1,3))
+doy <- as.numeric(SOE.data.2018[SOE.data.2018$Var == "sst mean 2017 MAB",]$Time)
+val_2017 <- SOE.data.2018[SOE.data.2018$Var == "sst mean 2017 MAB",]$Value
+val_LT <- SOE.data.2018[SOE.data.2018$Var == "sst mean long term MAB",]$Value
+val_LT_sd <- SOE.data.2018[SOE.data.2018$Var == "sst sd long term MAB",]$Value
+
+
+# val_2017 <- approx(doy,val_2017, xout = seq(doy[1],doy[length(doy)],length.out = 365*1))$y
+# val_LT <- approx(doy,val_LT, xout = seq(doy[1],doy[length(doy)],length.out = 365*1))$y
+# val_LT_sd <- approx(doy,val_LT_sd, xout = seq(doy[1],doy[length(doy)],length.out = 365*1))$y
+doy <- seq(doy[1],doy[length(doy)],length.out = 365*1)
+
+
+above_mean <- NULL
+for (i in 1:length(val_2017)){
+  if (val_2017[i] >= val_LT[i]){
+    above_mean[i] <- val_2017[i]
+  } else if (val_2017[i] < val_LT [i]){
+    above_mean[i] <- NA
+  }
+}
+
+below_mean <- NULL
+for (i in 1:length(val_2017)){
+  if (val_2017[i] <= val_LT[i]){
+    below_mean[i] <- val_2017[i]
+  } else if (val_2017[i] > val_LT [i]){
+    below_mean[i] <- NA
+  }
+}
+
+above_sd <- NULL
+for (i in 1:length(val_2017)){
+  if (val_2017[i] >= val_LT_sd[i] + val_LT[i]){
+    above_sd[i] <- val_2017[i]
+  } else if (val_2017[i] < val_LT_sd [i] + val_LT[i]){
+    above_sd[i] <- NA
+  }
+}
+
+below_sd <- NULL
+for (i in 1:length(val_2017)){
+  if (val_2017[i] <= val_LT[i] - val_LT_sd[i]){
+    below_sd[i] <- val_2017[i]
+  } else if (val_2017[i] > val_LT[i] - val_LT_sd [i]){
+    below_sd[i] <- NA
+  }
+}
+
+#Lines for polygons
+above_sd[is.na(above_sd)] <- val_LT_sd[which(is.na(above_sd))] + val_LT[which(is.na(above_sd))]
+below_sd[is.na(above_sd)] <- val_LT[which(is.na(below_sd))] - val_LT_sd[which(is.na(below_sd))] 
+above_mean[is.na(above_mean)] <- val_LT[which(is.na(above_mean))]
+below_mean[is.na(below_mean)] <- val_LT[which(is.na(below_mean))]
+
+upper <- val_LT_sd + val_LT
+lower <- val_LT - val_LT_sd
+
+#Null figure
+plot(NULL, xlim = c(doy[1],doy[(length(doy))]), ylim = c(4,25), las = 1, 
+     ylab = "", yaxt = "n", xaxt = "n", xlab = "")
+axis(2, cex.axis = 1.25, las = 1)
+axis(1,  labels = c("Jan","Mar","May","July","Sep","Nov","Jan"), 
+     at = c(1,61,122,183,245,306,365), cex.axis= 1.25)
+mtext(2, line = 2.5, text = expression(paste("Mean SST (",degree,"C)")), cex = 1.1)
+mtext(1, line = 2.5, text = "Time", cex = 1.1)
+text(15,21.5*.95,"A",cex = 1.5)
+# +/- 1 sd
+polygon(c(doy, rev(doy)),
+        c(upper, rev(lower)),
+        col = "grey85", border = NA)
+
+#Fills plot
+polygon(c(doy, rev(doy)),
+        c(below_mean + (val_LT-below_mean), rev(below_mean)),
+        col = "lightblue", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_mean - (above_mean-val_LT), rev(above_mean)),
+        col = "orange", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_sd - (above_sd-(val_LT + val_LT_sd)), rev(above_sd)),
+        col = "red", border = NA)
+polygon(c(doy, rev(doy)),
+        c(below_sd + (below_sd-(val_LT - val_LT_sd)), rev(below_sd)),
+        col = "blue", border = NA)
+points(doy,val_LT, type = "l", lwd = 1, "grey90")
+#points(doy,val_2017, type = "l", lwd = .5, "black")
+
+par(mar = c(4, 4, 2, 1))
+## primary production
+doy <- seq(1,52,1)
+ppd_val_2017 <- SOE.data.2018[SOE.data.2018$Var == "geometric mean ppd 2017 MAB",]$Value
+ppd_val_LT <- SOE.data.2018[SOE.data.2018$Var == "geometric mean ppd long term MAB",]$Value
+ppd_val_LT_sd <- SOE.data.2018[SOE.data.2018$Var == "sd ppd long term MAB",]$Value
+
+above_mean <- NULL
+for (i in 1:length(ppd_val_2017)){
+  if (ppd_val_2017[i] >= ppd_val_LT[i]){
+    above_mean[i] <- ppd_val_2017[i]
+  } else if (ppd_val_2017[i] < ppd_val_LT [i]){
+    above_mean[i] <- NA
+  }
+}
+
+below_mean <- NULL
+for (i in 1:length(ppd_val_2017)){
+  if (ppd_val_2017[i] <= ppd_val_LT[i]){
+    below_mean[i] <- ppd_val_2017[i]
+  } else if (ppd_val_2017[i] > ppd_val_LT [i]){
+    below_mean[i] <- NA
+  }
+}
+
+above_sd <- NULL
+for (i in 1:length(ppd_val_2017)){
+  if (ppd_val_2017[i] >= ppd_val_LT_sd[i] + ppd_val_LT[i]){
+    above_sd[i] <- ppd_val_2017[i]
+  } else if (ppd_val_2017[i] < ppd_val_LT_sd [i] + ppd_val_LT[i]){
+    above_sd[i] <- NA
+  }
+}
+
+below_sd <- NULL
+for (i in 1:length(ppd_val_2017)){
+  if (ppd_val_2017[i] <= ppd_val_LT[i] - ppd_val_LT_sd[i]){
+    below_sd[i] <- ppd_val_2017[i]
+  } else if (ppd_val_2017[i] > ppd_val_LT[i] - ppd_val_LT_sd [i]){
+    below_sd[i] <- NA
+  }
+}
+
+
+#Lines for polygons
+above_sd[is.na(above_sd)] <- ppd_val_LT_sd[which(is.na(above_sd))] + ppd_val_LT[which(is.na(above_sd))]
+below_sd[is.na(above_sd)] <- ppd_val_LT[which(is.na(below_sd))] - ppd_val_LT_sd[which(is.na(below_sd))] 
+above_mean[is.na(above_mean)] <- ppd_val_LT[which(is.na(above_mean))]
+below_mean[is.na(below_mean)] <- ppd_val_LT[which(is.na(below_mean))]
+
+upper <- ppd_val_LT_sd + ppd_val_LT
+lower <- ppd_val_LT - ppd_val_LT_sd
+
+#Null figure
+plot(NULL, xlim = c(doy[1],doy[(length(doy))]),ylim = c(0,2.25), las = 1, 
+     ylab = "", yaxt = "n", xaxt = "n", xlab = "")
+axis(2, cex.axis = 1.25, las = 1)
+axis(1,  labels = c("Jan","Mar","May","July","Sep","Nov","Jan"), 
+     at = c(1,8,16,24,32,40,48), cex.axis= 1.25)
+mtext(2, line = 2.5, text = expression(paste("Primary Production (gC m"^-2*"d"^-1*")")), cex = 1.1)
+mtext(1, line = 2.5, text = "Time", cex = 1.1)
+text(2,1.75*.95,"B", cex = 1.5)
+# +/- 1 sd
+polygon(c(doy, rev(doy)),
+        c(upper, rev(lower)),
+        col = "grey85", border = NA)
+
+#Fills plot
+polygon(c(doy, rev(doy)),
+        c(below_mean + (ppd_val_LT-below_mean), rev(below_mean)),
+        col = "lightblue", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_mean - (above_mean-ppd_val_LT), rev(above_mean)),
+        col = "darkolivegreen1", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_sd - (above_sd-(ppd_val_LT + ppd_val_LT_sd)), rev(above_sd)),
+        col = "darkolivegreen3", border = NA)
+polygon(c(doy, rev(doy)),
+        c(below_sd + (below_sd-(ppd_val_LT - ppd_val_LT_sd)), rev(below_sd)),
+        col = "blue", border = NA)
+points(doy,ppd_val_LT, type = "l", lwd = 1, "grey90")
+#points(doy,ppd_val_2017, type = "l", lwd = .5, "black")
+box(lty = 'solid', col = 'black',lwd = 1.25)
+
+par(mar = c(4, 4, 2, 1))
+## Chlorophyll a
+chl_val_2017 <- SOE.data.2018[SOE.data.2018$Var == "geometric mean chl 2017 MAB",]$Value
+chl_val_LT <- SOE.data.2018[SOE.data.2018$Var == "geometric mean chl long term MAB",]$Value
+chl_val_LT_sd <- SOE.data.2018[SOE.data.2018$Var == "sd chl long term MAB",]$Value
+
+above_mean <- NULL
+for (i in 1:length(chl_val_2017)){
+  if (chl_val_2017[i] >= chl_val_LT[i]){
+    above_mean[i] <- chl_val_2017[i]
+  } else if (chl_val_2017[i] < chl_val_LT [i]){
+    above_mean[i] <- NA
+  }
+}
+
+below_mean <- NULL
+for (i in 1:length(chl_val_2017)){
+  if (chl_val_2017[i] <= chl_val_LT[i]){
+    below_mean[i] <- chl_val_2017[i]
+  } else if (chl_val_2017[i] > chl_val_LT [i]){
+    below_mean[i] <- NA
+  }
+}
+
+above_sd <- NULL
+for (i in 1:length(chl_val_2017)){
+  if (chl_val_2017[i] >= chl_val_LT_sd[i] + chl_val_LT[i]){
+    above_sd[i] <- chl_val_2017[i]
+  } else if (chl_val_2017[i] < chl_val_LT_sd [i] + chl_val_LT[i]){
+    above_sd[i] <- NA
+  }
+}
+
+below_sd <- NULL
+for (i in 1:length(chl_val_2017)){
+  if (chl_val_2017[i] <= chl_val_LT[i] - chl_val_LT_sd[i]){
+    below_sd[i] <- chl_val_2017[i]
+  } else if (chl_val_2017[i] > chl_val_LT[i] - chl_val_LT_sd [i]){
+    below_sd[i] <- NA
+  }
+}
+
+
+#Lines for polygons
+above_sd[is.na(above_sd)] <- chl_val_LT_sd[which(is.na(above_sd))] + chl_val_LT[which(is.na(above_sd))]
+below_sd[is.na(above_sd)] <- chl_val_LT[which(is.na(below_sd))] - chl_val_LT_sd[which(is.na(below_sd))] 
+above_mean[is.na(above_mean)] <- chl_val_LT[which(is.na(above_mean))]
+below_mean[is.na(below_mean)] <- chl_val_LT[which(is.na(below_mean))]
+
+upper <- chl_val_LT_sd + chl_val_LT
+lower <- chl_val_LT - chl_val_LT_sd
+
+#Null figure
+plot(NULL, xlim = c(doy[1],doy[(length(doy))]),ylim = c(0,2), las = 1, 
+     ylab = "", yaxt = "n", xaxt = "n", xlab = "")
+axis(2, cex.axis = 1.25, las = 1)
+axis(1,  labels = c("Jan","Mar","May","July","Sep","Nov","Jan"), 
+     at = c(1,8,16,24,32,40,48), cex.axis= 1.25)
+mtext(2, line = 2.5, text = expression(paste("Chl ",alpha," mg m"^-3*"")), cex = 1.1)
+mtext(1, line = 2.5, text = "Time", cex = 1.1)
+
+# +/- 1 sd
+polygon(c(doy, rev(doy)),
+        c(upper, rev(lower)),
+        col = "grey85", border = NA)
+
+#Fills plot
+polygon(c(doy, rev(doy)),
+        c(below_mean + (chl_val_LT-below_mean), rev(below_mean)),
+        col = "lightblue", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_mean - (above_mean-chl_val_LT), rev(above_mean)),
+        col = "darkolivegreen1", border = NA)
+polygon(c(doy, rev(doy)),
+        c(above_sd - (above_sd-(chl_val_LT + chl_val_LT_sd)), rev(above_sd)),
+        col = "darkolivegreen3", border = NA)
+polygon(c(doy, rev(doy)),
+        c(below_sd + (below_sd-(chl_val_LT - chl_val_LT_sd)), rev(below_sd)),
+        col = "blue", border = NA)
+points(doy,chl_val_LT, type = "l", lwd = 1, "grey90")
+#points(doy,chl_val_2017, type = "l", lwd = .5, "black")
+box(lty = 'solid', col = 'black',lwd = 1.25)
+text(2,2.5*.95,"C", cex = 1.5)
+
+```
+
+While sea surface temperature in the U.S. NES was warmer than average for 2017, there were some regions that experienced cooler than average conditions in some seasons.  For most of the year the southern Mid-Atlantic Bight was cooler than average despite the entire U.S. NES region being above average.
+
+```{r sst_anomaly_maps,fig.cap="Sea surface temperature anomalies in winter (A), spring (B), summer (C), and fall (D) 2017. \\label{dists}" , fig.width = 8,fig.height = 5.5, fig.show='hold',fig.pos='H'}
+if (map_figs == T){
+  if (!printer_friendly){
+    #constants
+colors <- colorRampPalette(c("darkblue",'blue', 'white', 'firebrick1',"firebrick4"))  
+color_levels=100   
+
+#SST map function
+SST_plot <- function(raster_data, text,pos = "left"){
+  
+  #adjusts par for legend placement 
+  if (pos == "right"){
+    par(mar = c(4.5,0,3,10), mex = .3,  mgp = c(4, .35, 0))
+  } else{
+     par(mar = c(4.1,5,3,6), mex = .3,  mgp = c(4, .35, 0))
+  }
+  
+  #read .nc and convert to raster
+  d <- raster(raster_data)
+  crs(d) <- map.crs
+  #crop data
+  d <- crop(d, e)
+  
+  #get zmax
+  z.max=7
+
+  #plot raster
+  plot(d, col=colors(n=color_levels),
+       breaks=seq(-z.max,z.max,length.out=color_levels+1),
+       legend.width = 1.5,bty ="L",axes=F,
+       interpolate = T, las = 1,box = FALSE,legend = FALSE, asp = 1)
+  #plot contour
+  contour(bathy,drawlabels = F,nlevels = 5,add=T)
+  #plot coastline
+  plot(coast, col = 'grey',add = T , lty=0)
+  #axes
+
+  
+  if (pos == "left"){
+    axis(1, at = seq(-77,-65,2), labels = seq(-77,-65,2) , cex.axis = 0.7)
+    axis(2, cex.axis = 0.7)
+    abline(h = 34.95, lty = 1, lwd = 2)
+    abline(v =-77.2, lty = 1, lwd = 2)
+  } else {
+    axis(1, at = seq(-77,-65,2), labels = seq(-77,-65,2) ,
+         cex.axis = 0.7, pos = 34.9)
+    axis(2, cex.axis = 0.7, pos = -77.225)
+    abline(h = 34.9, lty = 1, lwd = 2)
+    abline(v =-77.225, lty = 1, lwd = 2)
+
+  }
+
+  #labels
+  text(-76,45,text,cex = 1.5)
+
+  
+}
+
+#plot maps
+par(oma=c(0,0,0,0), mfrow = c(2,2))
+SST_plot("Winter_2017_anomaly_1982_2012.nc","A")
+SST_plot("Spring_2017_anomaly_1982_2012.nc","B",pos = "right")
+SST_plot("Summer_2017_anomaly_1982_2012.nc","C")
+SST_plot("Fall_2017_anomaly_1982_2012.nc","D",pos = "right") 
+
+#plot only legend
+colors <- colorRampPalette(c("darkblue",'blue', 'white', 'firebrick1',"firebrick4")) 
+color_levels=100 
+z.max=7
+
+#set new par
+par(mfrow=c(1, 1), mar=c(2, 5, 2, 0), new=FALSE)
+
+#any data
+d <- raster(matrix(runif(100), ncol=10))
+
+#legend plot
+plot(d, col=colors(n=color_levels),
+     breaks=seq(-z.max,z.max,length.out=color_levels+1),
+     legend.shrink = 1,
+     legend.width = 1,legend.only = T,
+     axes=F, interpolate = T, las = 1,box = FALSE,
+     axis.args=list(at=seq(-z.max, z.max, length.out = 5),
+                    labels=seq(-7,7,length.out = 5), 
+                    cex.axis=0.8),
+     legend.args=list(text=expression(paste('Temperature Anomaly (',degree,"C)")),
+                      side=4, font=2, line=2, cex=1))
+  }
+
+}
+
+```
+
+```{r sst_anomaly_maps_pf, echo=F,fig.cap="Sea surface temperature anomalies in winter (A), spring (B), summer (C), and fall (D) 2017. \\label{dists}", fig.width=9, fig.height=6.75, fig.pos='H', fig.show='hold', message=FALSE, warning=F,fig.align='center',out.extra='trim={1cm 2.45cm 1cm 1cm},clip'}
+if(map_figs){
+  if(printer_friendly){
+
+sst_map <- suppressWarnings(readPNG(file.path(image.dir, "sst_anomaly_maps.png"), info = F))
+usr<-par("usr")
+plot.new()
+rasterImage(sst_map, usr[1], usr[3], usr[2], usr[4])
+
+  }
+
+}
+```
+##Patterns in the lower trophic levels (MAB)
+
+Chlorophyll a (CHL), an index for phytoplankton biomass, was above average in 2017, but there has been no distinct trend over the time series.   Primary production (PP) was also above average during most of 2017 throughout the MAB and has had an upward trend since 2004.  The high PP rates in the summer are likely due to increased remineralization of nutrients and regenerated production by smaller phytoplankton species.  This suggests that while overall PP may be increasing, not all of excess PP may be available to higher trophic levels. 
+
+```{r chl_ppd_maps,fig.cap="Primary production and chlorophyll anomaly maps \\label{ppchlanom}" ,  fig.width = 7,fig.height = 4, fig.show='hold',fig.pos='H'}
+#read images
+#read images
+ppd <-readPNG(file.path(image.dir,'PPD_anom_MAB.png'))
+chl <-readPNG(file.path(image.dir,'CHL_anom_MAB.png'))
+par(mar=c(0,0,0,0), xpd=NA, mgp=c(0,0,0), oma=c(0,0,0,0), ann=F, mfrow = c(1,2))
+plot.new()
+usr<-par("usr")
+
+#fill plot with images
+rasterImage(ppd, usr[1], usr[3], usr[2], usr[4])
+rasterImage(chl, usr[1]+1.1, usr[3], usr[2]+1.1, usr[4])
+```
+
+There is a coherent pattern between the primary production anomaly and the copepod size index for the MAB, with distinct peaks in production centered around 2002, 2010, and 2015, when the copepod size index was positive. The copepod size index relates the abundance anomaly of small bodied copepods to the abundance of a large bodied copepod, *Calanus finmarchicus*. Additionally, *Centropages typicus*, an important copepod in the MAB, exhibits a long-term decline in abundance, with negative anomaly observations  beginning in the early 2000s.
+
+```{r, MAB zooplankton, fig.cap="\\textit{C. typicus} abundance anomaly (A), and small-large copepod index with primary productivity anomaly (B) in the Mid-Atlantic.",echo = F, warning = F, include = T,  fig.show='hold', fig.align='default', out.width='.49\\linewidth',warning = F, message = F}
+
+
+#C. typicus abundance anomaly
+opar <- par(mar = c(4,4.75,2,4))
+soe.plot(SOE.data.2018, "Time", "Centropages typicus abundance anomaly MAB", 
+         anomaly = T, stacked = "A", suppressAxis = T, x.start = 1986, cex.stacked = 1.75)
+soe.stacked.axis("Year", "Abundance anomaly", rel.x.text = 1.2, rel.y.text = 1.2, 
+                 y.line = 3.1, outer = F)
+
+#small-large copepod index
+mab_prim_prod <- finder(SOE.data.2018, "annual ppd ratio anomaly MAB")
+mab_copepod_anom <- finder(SOE.data.2018, "Small-Large copepod Index MAB")
+usr <- par("usr")
+plot(NULL,ylim = c(-1.5,1.5), pch = 16, lwd = 3,xlim = c(1998,2017),
+       cex = 1.2, ylab = "", las = 1, xaxt = "n", cex.axis = 1.2, xlab = "")
+abline(h = 0, col  = "grey", lwd = 3, lty = 2) 
+with(SOE.data.2018[SOE.data.2018$Var == mab_copepod_anom,], points(Time[22:39], Value[22:39],
+       type = "o", col = "black", ylim = c(-1.5,1.5), pch = 16, lwd = 3,las = 1))
+mtext(side = 2, line = 3, "Small-Lg Copepod Index", cex = 1.2)
+text(1998,1.4,"B",cex = 1.75)
+par(new = T)
+
+#primary productivity
+with(SOE.data.2018[SOE.data.2018$Var ==  mab_prim_prod[1],], plot(Time, Value,
+       type = "o", col =  "springgreen2", ylim = c(.8,1.25), ylab = "", axes = F,log = "y",
+       yaxt = "n", pch = 16, lwd = 3, cex = 1.2, las = 1, xaxt = "n",xlab = ""))
+axis(side = 4, las = 1, cex.axis = 1.2)
+axis(side = 1, cex.axis = 1.2)
+mtext(side = 4, line = 3, "Mean Primary Production Ratio", cex = 1.2)
+mtext(side = 1, "", cex = 1.5, text = "Year",line = 2.5)
+legend("bottomright",
+         legend = c("Copepod Index", "Prim. Prod. Ratio"), col = c("black","springgreen2"),
+         bty = "n", lwd = 3)
+
+```
+
+
+
+### Groundfish condition (coastwide)
+
+Fish condition is measured as the weight per length-a measure of "fatness". This information is from NEFSC bottom trawl surveys and shows a change in condition across all species at around 2000. Between 2010-2013 many species started to have better condition, while black sea bass, goosefish and male spiny dogfish remained thinner for their length on average. This matches the trend in small-large copepods, perhaps reflecting changing nutrition across many species contributing to changes in condition. 
+
+
+```{r 'condition factor MAB' , fig.cap="Groundfish condition, MAB", echo = F, out.height='7cm', fig.align='center',fig.pos='H'}
+knitr::include_graphics(file.path(image.dir, 'MAFMC_Fish_Condition_2018.jpg'))
+```
+
+### Groundfish productivity (MAB)
+
+The number of small fish relative to the biomass of larger fish of the same species from the NEFSC survey is a simple measure of productivity, intended to complement model-based stock assessment estimates of recruitment for commercial species. There is a general decrease in this indicator when aggregated across managed species in the Mid-Atlantic.
+
+```{r groundfish productivity, fig.cap="Groundfish productivity (A: MAFMC managed species, B: Commercial MAB Species)", echo = F, out.width='9.2cm', out.height='9.2cm', fig.show='hold', fig.align = 'center',fig.pos='H'}
+## Functions for plotting
+library(ggplot2)
+library(rpart)
+
+#### Adjust plot properties -------------------------------
+adjustAxes <- 
+  ggplot2::theme(axis.title   = element_text(size = 18),
+                 axis.text    = element_text(size = 15),
+                 plot.title   = element_text(size = 20))
+
+ggplot <- function(...) { ggplot2::ggplot(...)  + 
+    ggplot2::theme_bw() + 
+    adjustAxes}
+
+
+#### Plot stacked bar with cpts for single var ------------
+plot_stackbarcpts_single <- function(YEAR, var2bar,
+                                     x, xlab, ylab,
+                                     titl,
+                                     file_suffix,
+                                     leg_font_size = 10,
+                                     remove_leg = FALSE,
+                                     leg_ncol = 1,
+                                     wcpts = TRUE,
+                                     wdashed = TRUE,
+                                     height = 5.5,
+                                     width = 8,
+                                     filt = TRUE,
+                                     label = label,
+                                     y.text = y.text) {
+  
+  dat2bar <- data.frame(YEAR, var2bar,
+                        x)
+  if (filt == TRUE){mab_species <-  list("SUMMER FLOUNDER","SCUP","BLACK SEA BASS","BLUEFISH",
+                                         "NORTHERN SHORTFIN SQUID", "LONGFIN SQUID", "ATLANTIC MACKEREL",
+                                         "BUTTERFISH","ATLANTIC SURFCLAM", "OCEAN QUAHOG", "TILEFISH",
+                                         "BLUELINE TILEFISH","SPINY DOGFISH", "GOOSEFISH")
+  dat2plot <-
+    dat2bar %>%
+    tidyr::gather(variable, value, -YEAR, -var2bar) %>%
+    dplyr::mutate(var2bar = gsub(pattern      = "_", 
+                                 replacement  = " ", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "Atl.", 
+                                 replacement  = "ATLANTIC", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "Atl", 
+                                 replacement  = "ATLANTIC", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "NS and combined", 
+                                 replacement  = "", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "YT", 
+                                 replacement  = "Yellowtail", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = " GoM", 
+                                 replacement  = " GOM", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = " by EPU", 
+                                 replacement  = "", 
+                                 x            = var2bar)) %>%
+    filter(var2bar %in% mab_species)
+} else if (filt == FALSE){
+    dat2plot <-
+    dat2bar %>%
+    tidyr::gather(variable, value, -YEAR, -var2bar) %>%
+    dplyr::mutate(var2bar = gsub(pattern      = "_", 
+                                 replacement  = " ", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "Atl.", 
+                                 replacement  = "ATLANTIC", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "Atl", 
+                                 replacement  = "ATLANTIC", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "NS and combined", 
+                                 replacement  = "", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = "YT", 
+                                 replacement  = "Yellowtail", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = " GoM", 
+                                 replacement  = " GOM", 
+                                 x            = var2bar),
+                  var2bar = gsub(pattern      = " by EPU", 
+                                 replacement  = "", 
+                                 x            = var2bar))
+}
+  p <-   
+    ggplot(dat2plot,
+           aes(x = YEAR)) +
+    geom_bar(data = dat2plot %>% filter(value > 0),
+             aes(y = value, fill = var2bar),
+             stat = "identity") +
+    geom_bar(data = dat2plot %>% filter(value < 0),
+             aes(y = value, fill = var2bar),
+             stat = "identity") +
+    geom_hline(size = 0.3, aes(yintercept = 0)) +
+    xlab(xlab) +
+    ylab(ylab) +
+    ggtitle(titl) +
+    guides(fill = guide_legend(ncol = leg_ncol)) +
+    theme(axis.title   = element_text(size = 16),
+          axis.text    = element_text(size = 15),
+          plot.title   = element_text(size = 20),
+          legend.text  = element_text(size = leg_font_size),
+          legend.title = element_blank()) +
+    annotate("text", label = label, x = 1980, y = y.text,size = 8, colour = "black")
+  
+  if(remove_leg) p <- p + theme(legend.position = "none")
+  
+  print(p)
+  
+  #ggsave(plot = p,
+  #       filename = "./productivity_all.eps",
+  #       width = width,
+  #       height = height)
+}
+
+bar_dat <-SOE.data.2018[grepl("by EPU",SOE.data.2018$Var) & SOE.data.2018$EPU == "MAB",]
+plot_stackbarcpts_single(YEAR = bar_dat$Time,
+                         var2bar = bar_dat$Var,
+                         x = bar_dat$Value,
+                         titl = "",
+                         xlab = "",
+                         ylab = "Small fish per large fish biomass (anomaly)",
+                         height = 5.5,
+                         width = 9,
+                         filt = TRUE,
+                         label = "A",
+                         y.text = 4.5)
+
+bar_dat <-SOE.data.2018[grepl("by EPU",SOE.data.2018$Var) & SOE.data.2018$EPU == "MAB",]
+plot_stackbarcpts_single(YEAR = bar_dat$Time,
+                         var2bar = bar_dat$Var,
+                         x = bar_dat$Value,
+                         titl = "",
+                         xlab = "",
+                         ylab = "Small fish per large fish biomass (anomaly)",
+                         height = 5.5,
+                         width = 9,
+                         filt = FALSE,
+                         label = "B",
+                         y.text = 10)
+```
+
+#Work in Progress
+
+##Forage fish energy content (coastwide)
+
+Work is in progress to address changes in forage fish energy content, which links observed changes in the plankton to resource and protected species condition, reproductive success, and population dynamics. A collaborative project between UMASS Dartmouth Biology Department (Dr. Ken Oliveira, M.S student Kelcie Bean) and NEFSC Population Biology Branch (Mark Wuenschel) is underway to evaluate energy content of forage species.  The study focuses on the following species; Atlantic herring, alewife, silver hake, butterfish, round herring, northern sandlance, menhaden, Atlantic mackerel, longfin squid, and northern shortfin squid.  Samples are being analyzed from the 2017 spring bottom trawl survey (n=1200), 2017 fall bottom trawl survey (n=1000), and from NEFSC study Fleet (n=400).  The percentage dry weight (water content) will be measured, as a predictor of energy density, and subsamples are being analyzed to determine remaining proximate composition (lipid, protein, ash) from which total energy can be calculated.  Samples from multiple seasons, and regions will enable evaluation of spatial and temporal patterns in energy content of forage. These current estimates will also be compared to historical estimates of forage energy content in the region (where available), to evaluate if long-term changes have occurred.  This study is more of an up to date 'snapshot' on the energy content of forage fishes, and not a time series per se; however, we hope the results will provide justification for and establish practical methods (e.g. % dry weight) to monitor energy content of key species on a routine basis. 
+
+##Management Complexity (Mid Atlantic)
+
+Constituents have frequently raised concerns about the complexity of fishery regulations and the need to simplify them to improve their efficacy. Complex regulations may lead to non-compliance and/or impact other fisheries.  This could be evaluated by quantifying the number of regulations and/or the frequency of regulatory changes (based on evaluation of the Code of federal regulations). In terms of recreational fisheries, the magnitude and frequency of change of management measures (size and bag limits, seasons, etc.) could also be evaluated/quantified.
+
+#Research Recommendations 
+The SSC reviewed a draft of this report in March 2018, and requested a clearer definition of "Mid Atlantic" be included in the report (such as a map--*included in this revision*).  Further, some important ecosystem dynamics happen at larger scales than the Mid Atlantic, so the SSC requested more rationale for the scale of indicators, and that indicators specific to the Mid-Atlantic region be clearly delineated from indicators representing a larger region. *Indicator scale has been included in section headings in this revision.* The SSC noted that some work had been done between the US and Canada to assemble survey information on species throughout the continental shelf across the international border and suggested that this information be examined and included if available and relevant. *This will be taken up as possible over the coming year.*
+
+The SSC commented that the indicators presented in the report generally align with the overall objectives, that the objectives are the right ones to look at, and that this is a good starting point; however, there may be better indicators than the ones presented.  For example, gross revenue is just a proxy for economic performance, which could be refined.  Similarly, recreational participation is driven by both management and other influences well outside MAFMC management, such as availability of leisure time and competing recreational opportunities.  As such, the SSC encourages more in-depth analysis of the social and economic indicators in the report. *This will be taken up as possible over the coming year.*
+
+#Acknowledgements
+
+**Editors:** Sarah Gaichas, Sean Hardison, Sean Lucey
+
+**Contributors:** Donald Anderson, Amani Bassyouni, Lisa Calvo, Lisa Colburn, Geret DePiper, Deb Duarte, Kevin Friedland, Sarah Gaichas, Heather Haas, Sean Hardison, Mike Hammil, Kimberly Hyde, Loren Kellogg, Kristin Kleisner, Dave Kulis, Sean Lucey, Chris Melrose, Ryan Morse, Kimberly Murray, Chris Orphanides, Charles Perretti, Karl Roscher, Vincent Saba, Laurel Smith, Mark Terceiro, John Walden, Harvey Walsh, Mark Wuenschel
+
