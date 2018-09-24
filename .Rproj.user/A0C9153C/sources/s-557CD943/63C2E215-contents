@@ -1,4 +1,0 @@
-nrow(sim_results[sim_results$test == "gls" &# &
-     sim_results$series.length == "10" &
-     sim_results$ar == "strongAR" &
-     sim_results$trend == "ltrendweak",])

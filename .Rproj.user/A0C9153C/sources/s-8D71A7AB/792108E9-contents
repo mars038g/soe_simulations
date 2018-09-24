@@ -1,5 +1,0 @@
-arima(lin_resid[[1]], order = c(1,0,0))
-ar(lin_resid[[1]], method = "yule-walker")
-ar(lin_resid[[1]], method = "burg")
-ar(lin_resid[[1]], method = "mle")
-ar(lin_resid[[1]], method = "yw")

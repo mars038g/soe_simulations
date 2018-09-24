@@ -1,8 +1,0 @@
-df <- sprintf("http://comet.nefsc.noaa.gov/erddap/tabledap/%s.csv", tab_list$Identifier) %>% 
-  purrr::map(function(x) {
-    readr::read_csv(url(x))
-  })
-names(df) <- tab_list$Identifier
-df[[tab_list$Identifier[9]]]   
-
-
