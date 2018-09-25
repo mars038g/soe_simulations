@@ -554,14 +554,14 @@ Simulated time series were generated through the addition of $AR(1)$ autoregress
 
 \begin{equation}
 \begin{split}
-Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \mu_{t} \\
-\mu_{t} = \rho\mu_{t-1} + \omega_{t} \\
+Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \varepsilon_{t} \\
+\varepsilon_{t} = \rho\varepsilon_{t-1} + \omega_{t} \\
 \omega_{t} \sim N(0, \sigma^{2})
 \end{split}
  \label{eqn:1}
 \end{equation}
 
-where $Y_{t}$ is the simulated series at time $t$, $\alpha_{1}$ is the slope component, and $\mu_{t}$ is the AR1 error process; the strength of which is given by $\rho$, with the error component $\omega_{t}$ assumed to be derived from Gaussian white noise. Through the preliminary analysis detailed above, the levels of $\alpha_{1}$ were 0.026, 0.051, and 0.147, which we combined with three levels of $\rho$: 0, 0.43, and 0.8. For each trend strength, autocorrelation strength, and time series length, 1000 simulations were performed. To test the null hypothesis of no trend in simulated time series, we used a generalized least squares (GLS) model selection process, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
+where $Y_{t}$ is the simulated series at time $t$, $\alpha_{1}$ is the slope component, and $\varepsilon_{t}$ is the AR1 error process; the strength of which is given by $\rho$, with the error component $\omega_{t}$ assumed to be derived from Gaussian white noise. Through the preliminary analysis detailed above, the levels of $\alpha_{1}$ were 0.026, 0.051, and 0.147, which we combined with three levels of $\rho$: 0, 0.43, and 0.8. For each trend strength, autocorrelation strength, and time series length, 1000 simulations were performed. To test the null hypothesis of no trend in simulated time series, we used a generalized least squares (GLS) model selection process, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
 
 We focus our analyses on rejection rates of the null hypothesis of no trend, as this methodology is a common framework for assessing the flexibility of trend models to deviations from assumptions [e.g. @Yue2002a; Yue2002b]. Further, null hypothesis testing is often applied in ecosystem indicator reporting for assessing trend [e.g. @NEFSC2018a; NEFSC2018b]. We chose to extend this analysis of rejection rates for the scenario of no trend and strong autocorrelation to larger sample size (N = 50-650) to highlight the shortcoming of small sample sizes when strong autocorrelation is present. Our final analysis compared the efficacy of the non-parametric Sen's slope to the GLS estimator for assigning linear trend to data where trend was found to be significant (p < 0.05). 
 
@@ -572,8 +572,8 @@ A GLS model selection procedure was implemented to test for trend in simulated s
 
 \begin{equation}
 \begin{split}
-Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \alpha_{2}X_{t}^{2} + \mu_{t} \\
-\mu_{t} = \rho\mu_{t-1} + \omega_{t} \\
+Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \alpha_{2}X_{t}^{2} + \varepsilon_{t} \\
+\varepsilon_{t} = \rho\varepsilon_{t-1} + \omega_{t} \\
 \omega_{t} \sim N(0, \sigma^{2})
 \end{split}
  \label{eqn:2}
