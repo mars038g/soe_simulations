@@ -4,16 +4,16 @@
     "created" : 1537554253191.000,
     "dirty" : false,
     "encoding" : "ISO8859-1",
-    "folds" : "18|27|45|0|\n47|26|271|0|\n273|42|288|0|\n311|427|547|0|\n693|38|838|0|\n840|46|863|0|\n865|29|975|0|\n",
-    "hash" : "1008785906",
+    "folds" : "19|27|46|0|\n48|26|272|0|\n274|42|289|0|\n312|427|548|0|\n694|38|839|0|\n841|46|864|0|\n866|29|976|0|\n981|428|1001|0|\n",
+    "hash" : "2607019000",
     "id" : "D7FB2FCA",
-    "lastKnownWriteTime" : 1537804385,
-    "last_content_update" : 1537804385604,
+    "lastKnownWriteTime" : 1537879802,
+    "last_content_update" : 1537879803027,
     "path" : "~/soe_simulations/SOE_sims_manuscript.Rmd",
     "project_path" : "SOE_sims_manuscript.Rmd",
     "properties" : {
-        "cursorPosition" : "311,425",
-        "scrollLine" : "304"
+        "cursorPosition" : "1193,1186",
+        "scrollLine" : "1190"
     },
     "relative_order" : 1,
     "source_on_save" : false,
