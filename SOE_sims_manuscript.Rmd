@@ -1,21 +1,17 @@
 ---
 title: "A simulation study of trend detection methods for Integrated Ecosystem Assessment"
-author: "Sean Hardison, Charles Perretti, Andy Beet, Geret DePiper"
-date: "June 29, 2018"
 output:
-  pdf_document: default
+  pdf_document: 
   word_document: default
   html_document:
     df_print: paged
 indent: yes
-header-includes:
-- \usepackage{setspace}
-- \doublespacing
-- \usepackage{float}
-- \usepackage[bottom]{footmisc}
-- \usepackage{amsmath}
+geometry: margin=1in
 bibliography: SOE simulations.bib
+csl: ices-journal-of-marine-science.csl
+documentclass: ouparticle
 ---
+
 
 ```{r setup, include=FALSE}
 # rmarkdown::render("SOE_simulations_methods.Rmd", "all") # for both pdf and html
@@ -289,20 +285,26 @@ strongAR <- 0.8
 
 ```
 
-##Abstract
+## Abstract
+
 The identification of trends in ecosystem indicators has become a core component of ecosystem approaches to resource management, although oftentimes assumptions of statistical models are not properly accounted for in the reporting process. To explore the limitations of trend analysis of short times series, we applied three common methods of trend detection, including a generalized least squares model selection approach, the Mann-Kendall test, and Mann-Kendall test with trend-free pre-whitening to simulated time series of varying trend and autocorrelation strengths. Our results suggest that the ability to detect trends in time series is hampered by the influence of autocorrelated residuals in short series lengths. While it is known that tests designed to account for autocorrelation will approach nominal rejection rates as series lengths increase, the results of this study indicate biased rejection rates in the presence of even weak autocorrelation for series lengths often encountered in indicators developed for ecosystem-level reporting (N = 10, 20, 30). This work has broad implications for ecosystem-level reporting, where indicator time series are often limited in length, maintain a variety of error structures, and typically are assessed using a single statistical method applied uniformly across all time series. If a hypothesis testing approach for indicator trend analysis is to be implemented, we suggest first characterizing candidate series based on suitability (e.g. based on variance, autocorrelation, and series length) rather than a uniform application of tests for trend. A parametric approach to trend assessment could then be used to provide estimates of uncertainty and trend strengths from probability distributions.
 
-##Introduction
+\textbf{Keywords}: Ecosystem-based fisheries management, trend analysis, time series
+
+
+\newpage
+
+## Introduction
 
  The development and analysis of indicators plays a key strategic role in implementing the Ecosystem Approach for a host of science, management, and intergovernmental organizations [e.g. @NOAA2006; @ICES2013; @SecretariatoftheConventiononBiologicalDiversity2004; @Pices2010; @Garcia2003; @Levin2009a]. At least partially in support of this, substantial effort has been invested in assessing indicator status and trends for the purpose of ecosystem reporting, in all of its guises [e.g. @Garfield2016; @NEFSC2018a; @NEFSC2018b; @NEFSC2018c; @NEFSC2018d; @Blanchard2010; O'Brien 2017; @Butchart2010].
 
 Ecosystem-level indicators often vary greatly with respect to the length of the series under investigation. The ultimate goal of providing integrated advice often leads analysts to truncate longer datasets; generating a consistent series length across indicators for comparison purposes [e.g. @Blanchard2010; @Shin2010; @Shannon2010; @Canales2015]. Further reinforcing this approach is the fact that managers tend to focus on short-term issues [@SecretariatoftheConventiononBiologicalDiversity2004; @Wagner2013], which ultimately necessitates the assessment of trajectories at relatively short time scales.
 
-These issues can lead to the use of short time series for the purpose of ecosystem reporting; i.e. less than 20 data points per indicator [@Blanchard2010; @Shin2010; @Shannon2010; @Canales2015; @Mackas2001; @Nicholson2004]. Statistical trend analysis of indicator data is the gold standard for managers, stakeholders, and analysts. However, in reality trend analysis in this context can be extremely difficult. Evidence indicates that the statistical power to identify trends using short time series may be limited in general [@bence1995; @Nicholson2004; @Wagner2013]. The hydrological, climatological, and statistical  literature shows that autocorrelation in time series can falsely inflate trend detection rates when models are incorrectly specified assuming the independence of error terms [@Kulkarni1995; @woodward1997; @hamed1998; @VonStorch1999a; @Nicholls2001a; @roy2004, @Zhang2000; @Wang2001a;  @Yue2002a; @Bayazit2015] . The magnitude of assigned trends can also be inflated by the presence of autocorrelation, and both of these problems are amplified by short time series [@Kulkarni1995; @Yue2002a]. Despite this, there has been no systematic investigation for the performance of models in detecting trends across the full breadth of indicators utilized in ecosystem reporting.
+These issues can lead to the use of short time series for the purpose of ecosystem reporting; i.e. less than 20 data points per indicator [@Blanchard2010; @Shin2010; @Shannon2010; @Canales2015; @Mackas2001; @Nicholson2004]. Statistical trend analysis of indicator data is the gold standard for managers, stakeholders, and analysts. However, in reality trend analysis in this context can be extremely difficult. Evidence indicates that the statistical power to identify trends using short time series may be limited in general [@bence1995; @Nicholson2004; @Wagner2013]. The hydrological, climatological, and statistical  literature shows that autocorrelation in time series can falsely inflate trend detection rates when models are incorrectly specified assuming the independence of error terms [@Kulkarni1995; @woodward1997; @hamed1998; @VonStorch1999a; @Nicholls2001a; @roy2004; @Zhang2000; @Wang2001a;  @Yue2002a; @Bayazit2015]. The magnitude of assigned trends can also be inflated by the presence of autocorrelation, and both of these problems are amplified by short time series [@Kulkarni1995; @Yue2002a]. Despite this, there has been no systematic investigation for the performance of models in detecting trends across the full breadth of indicators utilized in ecosystem reporting.
 
-In this manuscript we abstract away from issues surrounding the identification and vetting of appropriate indicators, but note that this in itself can be a challenging undertaking for which @Bundy2017 present a survey of the literature. We focus, instead, on the ability to statistically identify trends for the broad array of indicators used in marine ecosystem reporting; ranging from large-scale climatological and oceanographic drivers through the benefits derived by human society. We use Monte Carlo simulations to assess the performance of the most commonly applied statistical models under a range of time series lengths, trend strengths, and autocorrelation regimes. The simulations are parameterized using the properties of indicators currently presented in the Mid-Atlantic and New England State of the Ecosystem Reports, which are annual ecosystem status reports tailored for the U.S. Mid-Atlantic and New England Fishery Management Councils respectively [NEFSC 2018a; NEFSC 2018b].
+In this manuscript we abstract away from issues surrounding the identification and vetting of appropriate indicators, but note that this in itself can be a challenging undertaking for which @Bundy2017 present a survey of the literature. We focus, instead, on the ability to statistically identify trends for the broad array of indicators used in marine ecosystem reporting; ranging from large-scale climatological and oceanographic drivers through the benefits derived by human society. We use Monte Carlo simulations to assess the performance of the most commonly applied statistical models under a range of time series lengths, trend strengths, and autocorrelation regimes. The simulations are parameterized using the properties of indicators currently presented in the Mid-Atlantic and New England State of the Ecosystem Reports, which are annual ecosystem status reports tailored for the U.S. Mid-Atlantic and New England Fishery Management Councils respectively [@NEFSC2018a; @NEFSC2018b].
 
-Results indicate that correctly identifying trends is problematic using less than 30 data points, with both Type I and Type II error common. Even under the strongest signal-noise ratio (i.e. strong trends and no autocorrelation) tests perform poorly across all series length. The simulations highlight problems associated with standardizing approaches across indicators, and suggest that further thought is warranted on status and trend analysis in the context of ecosystem reporting.
+Results indicate that correctly identifying trends is problematic using less than 30 data points, with both Type I and Type II error common. Even under the strongest signal-noise ratio (i.e. strong trends and no autocorrelation) tests perform poorly when series lengths are less than 30. The simulations highlight problems associated with standardizing approaches across indicators, and suggest that further thought is warranted on status and trend analysis in the context of ecosystem reporting.
 
 ## Methods
 
@@ -485,6 +487,7 @@ mean_beta1_linear <- mean(abs_beta)
 lower_95_beta1 <- quantile(x = abs_beta, probs = 0.05)
 upper_95_beta1 <- quantile(x = abs_beta, probs = 0.95)
 mean_AR_coef_lin <- mean(AR_coef)
+
 mean_AR_var <- mean(arima_lin_df$Variance)
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
@@ -493,7 +496,7 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,18)) +
-  xlab(expression(beta)) +
+  xlab(expression(alpha[1])) +
   ylab("") +
   geom_vline(aes(xintercept = mean_beta1_linear), col = "indianred", size = 1) +
   geom_vline(aes(xintercept = upper_95_beta1), col = "indianred", size = 1, linetype = "dashed") +
@@ -563,7 +566,7 @@ Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \varepsilon_{t} \\
 
 where $Y_{t}$ is the simulated series at time $t$, $\alpha_{1}$ is the slope component, and $\varepsilon_{t}$ is the AR1 error process; the strength of which is given by $\rho$, with the error component $\omega_{t}$ assumed to be derived from Gaussian white noise. Through the preliminary analysis detailed above, the levels of $\alpha_{1}$ were 0.026, 0.051, and 0.147, which we combined with three levels of $\rho$: 0, 0.43, and 0.8. For each trend strength, autocorrelation strength, and time series length, 1000 simulations were performed. To test the null hypothesis of no trend in simulated time series, we used a generalized least squares (GLS) model selection process, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
 
-We focus our analyses on rejection rates of the null hypothesis of no trend, as this methodology is a common framework for assessing the flexibility of trend models to deviations from assumptions [e.g. @Yue2002a; Yue2002b]. Further, null hypothesis testing is often applied in ecosystem indicator reporting for assessing trend [e.g. @NEFSC2018a; NEFSC2018b]. We chose to extend this analysis of rejection rates for the scenario of no trend and strong autocorrelation to larger sample size (N = 50-650) to highlight the shortcoming of small sample sizes when strong autocorrelation is present. Our final analysis compared the efficacy of the non-parametric Sen's slope to the GLS estimator for assigning linear trend to data where trend was found to be significant (p < 0.05). 
+We focused our analyses on rejection rates of the null hypothesis of no trend, as this methodology is a common framework for assessing the flexibility of trend models to deviations from assumptions [e.g. @Yue2002a; @Yue2002b]. Further, null hypothesis testing is often applied in ecosystem indicator reporting for assessing trend [e.g. @NEFSC2018a; @NEFSC2018b]. We chose to extend this analysis of rejection rates for the scenario of no trend and strong autocorrelation to larger sample sizes (N = 50-650) to highlight the shortcoming of small sample sizes when strong autocorrelation is present. Our final analysis compared the efficacy of the non-parametric Sen's slope to the GLS estimator for assigning linear trend to data where trend was found to be significant (P < 0.05). 
 
 #### Generalized least squares
 
@@ -574,7 +577,7 @@ A GLS model selection procedure was implemented to test for trend in simulated s
 \begin{split}
 Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \alpha_{2}X_{t}^{2} + \varepsilon_{t} \\
 \varepsilon_{t} = \rho\varepsilon_{t-1} + \omega_{t} \\
-\omega_{t} \sim N(0, \sigma^{2})
+\omega_{t} \sim N(0, \sigma^{2}).
 \end{split}
  \label{eqn:2}
 \end{equation}
@@ -584,7 +587,7 @@ The above model follows the same notation as our simulated series. Setting $\alp
 
 #### Mann Kendall test
 
-Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) [@mann1945; @kendall1955] and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW)[@Yue2002b]. The MK test is a nonparametric test for trend that assumes sample data are independent and identically distributed. Serial correlation within sample data has been found to lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test [@Kulkarni1995]. Residual pre-whitening is a common correction to address autocorrelation within MK tests, although pre-whitening is known to reduce the magnitude of existing trend [Yue2002a]. The MK with trend-free pre-whitening is a step-wise procedure developed by @Yue2002b to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
+Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) [@mann1945; @kendall1955] and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW)[@Yue2002b]. The MK test is a nonparametric test for trend that assumes sample data are independent and identically distributed. Serial correlation within sample data has been found to lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test [@Kulkarni1995]. Residual pre-whitening is a common correction to address autocorrelation within MK tests, although pre-whitening is known to reduce the magnitude of existing trend [@Yue2002a]. The MK with trend-free pre-whitening is a step-wise procedure developed by @Yue2002b to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
 
 
 
@@ -640,7 +643,8 @@ The Mann Kendall trend-free pre-whitening procedure as developed by @Yue2002a is
 
 
 \begin{enumerate}
-\item \textit{Removal of trend} - The slope of trend $b$ is estimated using the Theil-Sen estimator [@theill1992; @sen1968] and removed from sample data if different from zero, where $b$ is given by
+\item \textit{Removal of trend} -  The Theil-Sen estimator (Sen, 1968; Theil, 1992) is used to estimate the slope of trend $b$, which is removed from sample data if different from zero. $b$ is given by
+
 
 \begin{equation}
 \begin{split}
@@ -659,7 +663,7 @@ y_{t}^{'} = y_{t} - bt,
 \end{equation}
 
 where $y_{t}$ is the original series at time step $t$.
-\item \textit{Trend-free pre-whitening} - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\rho_{1}$ is computed using 
+\item \textit{Trend-free pre-whitening} - A pre-whitening step is applied to the detrended series to remove the $AR(1)$ component. First, the lag-$1$ autocorrelation coefficient $\rho_{1}$ is found using 
 
 \begin{equation}
 \begin{split}
@@ -862,6 +866,34 @@ sim_results$series.length = factor(sim_results$series.length, levels=c(10,20,30)
 #aggregate p values for plotting
 p_agg <- sim_results %>% group_by(series.length, trend, ar, test) %>%
   dplyr::summarise(prop = length(p[p < 0.05])/n())
+
+#some values for text
+gls <- p_agg %>% filter(ar == "no AR", test == "gls")
+pw <- p_agg %>% filter(ar == "no AR", test == "pw")
+
+perc_change1 <- abs(mean(pw$prop) - mean(gls$prop))/mean(gls$prop) * 100
+nom_p<- p_agg %>% filter(trend == "no trend", ar == "no AR", series.length == 10)
+strAR_noTR <- p_agg %>% filter(trend  == "no trend", ar == "strong AR", series.length == 30)
+
+perc_change_mk <- round(abs(strAR_noTR[strAR_noTR$test == "mk",]$prop - strAR_noTR[strAR_noTR$test == "gls",]$prop)/
+                        (strAR_noTR[strAR_noTR$test == "mk",]$prop) * 100,0)
+perc_change_pw <- round(abs(strAR_noTR[strAR_noTR$test == "pw",]$prop - strAR_noTR[strAR_noTR$test == "gls",]$prop)/
+                        (strAR_noTR[strAR_noTR$test == "pw",]$prop) * 100,0)
+
+#sample size effect
+ss1 <- p_agg %>% filter(trend  == "no trend", ar == "strong AR", series.length == 10)
+ss2 <- p_agg %>% filter(trend  == "no trend", ar == "strong AR", series.length == 30)
+
+pw1 <- ss1[ss1$test == "pw",]$prop
+pw2 <- ss2[ss2$test == "pw",]$prop
+
+pw_ss <- round((pw1 - pw2)/pw1, 2)*100
+
+gls1 <- ss1[ss1$test == "gls",]$prop
+gls2 <- ss2[ss2$test == "gls",]$prop
+
+gls_ss <- round((gls1 - gls2)/gls1, 2)*100
+
 ```
 
 ```{r power subset, echo = F}
@@ -977,7 +1009,7 @@ for (m in seq(50,650,50)){
 ```
 
 
-Throughout this study we adopt an alpha value of 0.05 to assess significance of statistical results. Overall, no method performed consistently well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere (Yue and Wang 2002; Yue et al. 2002), we find time series length has a large effect on the power of each test (Figure \ref{Fig2}), and performance was generally best across autocorrelation and trend scenarios when N = 30. With no autocorrelation and trend present, trends were only detected with > 90% accuracy when trend was strong ($\alpha_{1} = 0.147$). Even with a strong trend and no autocorrelation, no test detected a trend in greater than 50% of the series when N = 10. Again under no autocorrelation, the increased power associated with increasing series length diminished with reductions in trend strength across all tests. Under no autocorrelation, the GLS test showed the highest rejection rates compared to other tests, although this effect was minimal (mean difference of rejection rates between GLS and MK-TFPW  was <3%). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 (MK-TFPW~sig~ = 0.096, MK~sig~ = 0.035, GLS~sig~ = 0.065).
+Throughout this study we adopt an alpha value of 0.05 to assess significance of statistical results. Overall, no method performed consistently well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere (Yue and Wang 2002; Yue et al. 2002), we find time series length has a large effect on the power of each test (Figure \ref{Fig2}), and performance was generally best across autocorrelation and trend scenarios when N = 30. With no autocorrelation and trend present, trends were only detected with > 90% accuracy when trend was strong ($\alpha_{1} = 0.147$). Even with a strong trend and no autocorrelation, no test detected a trend in greater than 50% of the series when N = 10. Again under no autocorrelation, the increased power associated with increasing series length diminished with reductions in trend strength across all tests. The GLS test showed the highest rejection rates compared to other tests under no autocorrelation, although this effect was minimal (percent increase of rejection rates between GLS and MK-TFPW  was ~`r round(perc_change1,0)`%). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 (MK-TFPW~sig~ = `r round(nom_p[nom_p$test == "pw",]$prop,3)`, MK~sig~ = `r round(nom_p[nom_p$test == "mk",]$prop,3)`, GLS~sig~ = `r round(nom_p[nom_p$test == "gls",]$prop,3)`).
   
 ```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
 
@@ -1001,9 +1033,9 @@ ggplot(p_agg, aes(color = Method, y = prop,
 
 ```
 
-  Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@VonStorch1999a; @Yue2002a], and our work also shows that under no simulated trend, introducing autocorrelation will lead to inflated rejection rates in the MK test. The bottom row of Figure \ref{2} shows that under no trend and medium to strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates.
+  Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@VonStorch1999a; @Yue2002a], and our work also shows that under no simulated trend, introducing autocorrelation will lead to inflated rejection rates in the MK test. The bottom row of Figure \ref{Fig2} shows that under no trend and medium to strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates.
 
-  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was 0.16, 46% and 64% lower than the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the MK-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only 13.9% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by 59%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.
+  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was `r strAR_noTR[strAR_noTR$test == "gls",]$prop`; `r perc_change_pw`% and `r perc_change_mk`% lower than the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the MK-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only `r pw_ss`% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by `r gls_ss`%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.
 
 Extending this no trend and strong autocorrelation scenario out to longer series lengths shows that the GLS test reaches nominal rejection rates of 0.05 only when $N \geq 500$ (Figure \ref{Fig3}). The MK-TFPW approach performed poorly in this analysis, and did not converge to nominal rejection rates for $N < 500$, although this work did not seek to identify a precise value of N where the MK-TFPW approach reached nominal levels. As expected, the MK test performed poorly in this scenario, and saw no reduction in rejection rates as N increased. 
 
@@ -1030,7 +1062,7 @@ ggplot(pow, aes(x = series.length, y = rej_prop, group = Method,fill = Method)) 
         strip.text = element_text(size = 10))
 ```
 
-Under strong autocorrelation ($\rho = 0.8$) and strong trend ($\alpha_{1} = 0.147$), the relationship between time series length and rejection rate was positive, highlighting the importance of the trend signal strength on test results. Under these parameters, the MK-TFPW test performed slightly better than the GLS approach, although both tests were only able to detect trend in >50% of simulations when trend was strong and N = 20 or N = 30. When $\alpha_{1} < 0.0147$ and autocorrelation was strong, neither the GLS nor MK-TFPW tests were able to detect trend in >50% of simulations regardless of series length. Interestingly, as series lengths increased when trend was weak (i.e. $\alpha_{1} = 0.026$) and $\rho = 0.8$, rejection rates tended to decrease for GLS and MK-TFPW tests. The relative success of each test when N = 30 can be seen in Figure \ref{Fig4}, which shows that the GLS approach was most effective in avoiding false positives, but performed similarly to the MK-TFPW test in terms of false negatives.      
+Shown in Figure \ref{Fig2} under strong autocorrelation ($\rho = 0.8$) and strong trend ($\alpha_{1} = 0.147$), the relationship between time series length and rejection rate was positive, highlighting the importance of the trend signal strength on test results. Under these parameters, the MK-TFPW test performed slightly better than the GLS approach, although both tests were only able to detect trend in >50% of simulations when trend was strong and N = 20 or N = 30. When $\alpha_{1} < 0.0147$ and autocorrelation was strong, neither the GLS nor MK-TFPW tests were able to detect trend in >50% of simulations regardless of series length. Interestingly, as series lengths increased when trend was weak (i.e. $\alpha_{1} = 0.026$) and $\rho = 0.8$, rejection rates tended to decrease for GLS and MK-TFPW tests. The relative success of each test when N = 30 can be seen in Figure \ref{Fig4}, which shows that the GLS approach was most effective in avoiding false positives, but performed similarly to the MK-TFPW test in terms of false negatives.      
   
 ```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS procedure falsely predicted a trend when there was none in 11.1\\% of cases (white), whereas this was true in 22.1\\% of Mann-Kendall simulations (red).\\label{Fig4}' }
 
@@ -1079,7 +1111,7 @@ ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
         panel.background = element_blank())
 ```
 
-We next assessed the ability of each statistical approach to estimate the true trend (Figures \ref{Fig5} and \ref{Fig 6}). In the nonparametric case, we used Sen's slope (as derived in Equation 8), which is a common statistic estimated alongside the MK and MK-TFPW significance tests. Sen's slope and the GLS estimator perform similarly across all scenarios. For both methods, the spread of estimated trends increased with autocorrelation strength, although this effect was mediated by increasing series length (e.g. Fig \ref{6}). Further, trends falsely assigned in the "no trend" scenarios tended to have the largest spread. As shown by the black median lines in Figure \ref{5}, both GLS and Sen's slope methods consistently overestimated trend slope when it existed, although both performed well under the strong autocorrelation scenario when trend was strong and N = 30.
+We next assessed the ability of each statistical approach to estimate the true trend (Figures \ref{Fig5} and \ref{Fig6}). In the nonparametric case, we used Sen's slope (as derived in Equation 8), which is a common statistic estimated alongside the MK and MK-TFPW significance tests. Sen's slope and the GLS estimator perform similarly across all scenarios. For both methods, the spread of estimated trends increased with autocorrelation strength, although this effect was mediated by increasing series length (e.g. Fig \ref{Fig6}). Further, trends falsely assigned in the "no trend" scenarios tended to have the largest spread. As shown by the black median lines in Figure \ref{Fig5}, both GLS and Sen's slope methods consistently overestimated trend slope when it existed, although both performed well under the strong autocorrelation scenario when trend was strong and N = 30.
 
 ```{r trend slope, fig.align="center", echo = F, fig.cap="Violin plots showing probability densities of estimated trends from GLS and Sen's slope procedures under varying autocorrelation scenarios $(\\rho = 0, 0.43, 0.8)$ and simulation lengths (N = 10, 20, 30). Black lines represent the median slope estimate, and red lines the true slope. For this exercise, the GLS model selection procedure was constrained to fit only linear models of trend.\\label{Fig5}"}
 
@@ -1121,7 +1153,7 @@ ggplot(df, aes(factor(series.length), slope_pred)) +
 ```
 
 
-```{r sd of trend estimates, fig.align = "center", echo = F, fig.cap = "Standard deviations of trend estimates derived from Sen's slope and GLS methods across autocorrelation strengths ($\\rho = 0, 0.433, 0.8$), trend strengths ($\\alpha_{1} = 0, 0.026, 0.052, 0.147$), and trend methods. \\label{Fig6}"}
+```{r sd of trend estimates, fig.align = "center", echo = F, fig.cap = "Sample standard deviations of trend estimates derived from Sen's slope and GLS methods across autocorrelation strengths ($\\rho = 0, 0.433, 0.8$), trend strengths ($\\alpha_{1} = 0, 0.026, 0.052, 0.147$), and trend detection methods. \\label{Fig6}"}
 stdev <- NULL
 
 for (t in c("GLS","Sen's slope")){
@@ -1180,12 +1212,12 @@ ggplot(data = stdev) + geom_line(aes(x = Autocorrelation, y = stdev,
 ```
 
 
-##Discussion
+## Discussion
 Ecosystem reporting is vital to the development of Integrated Ecosystem Assessments (IEA), which lay out the framework for moving toward Ecosystem-Based Fishery Management (EBFM)[@Levin2009a]. The key analytical foundations to all IEA products revolve around the concept of indicator change; with managers most interested in short-term, abrupt changes to indicator status [@Wagner2013]. Here we addressed the shortcomings of assigning significant trends to indicator time series given the common problems of small sample size and autocorrelation. Our results show that statistical methods commonly used to detect trend in the presence of autocorrelated residuals may be misleading when applied to short time series.
 
 In the Northeast US, indicators considered in the ecosystem assessment process are annual data typically ranging between 10-60 years in length. In the context of hydrological literature, the upper limit of time series lengths seen in our indicator data sets would be considered short [@Bayazit2015]. This study highlights the dangers of assigning trends to short time series even while attempting to address problems of autocorrelation. The influence of autocorrelation in short series inevitably increases Type II error rates (the failure to identify trend when it exists). This was especially true under scenarios of strong autocorrelation, which effectively masked the detection of trend unless trend was strong and N was large. Possibly even more problematic, an increase in Type I error, or the false rejection of the null hypothesis, occurred as the strength of autocorrelation increased. A departure from nominal rejection rates was seen from all tests with even moderate amounts of autocorrelation.
 
-Our work focused on the capacity of tests to detect weak trend strengths in simulated time series. We found that under the limitations imposed by series lengths $\leq$ 30, no test was effective in detecting weak trends, even without autocorrelation (e.g. Fig. \ref{Fig2} no AR and weak trend scenario). Decreasing rejection rates with increasing series lengths for GLS and MK-TFPW tests under weak trend and strong autocorrelation further illustrate the "masking" effect of autocorrelation on trend detection. This result supports the work of others [e.g. @Wagner2013] that have found small trend changes in short time series difficult to detect regardless of autocorrelation. The role of autocorrelation in making trend can in part can be explained by the variance of the random error used in our simulations ($\sigma^{2} = 0.54$). While this may be considered large relative to the our definition of weak trend, it was selected based on the properties of real ecosystem indicators.
+Our work focused on the capacity of tests to detect weak trend strengths in simulated time series. We found that under the limitations imposed by series lengths $\leq$ 30, no test was effective in detecting weak trends, even without autocorrelation (e.g. Figure \ref{Fig2}; no AR and weak trend scenario). Decreasing rejection rates with increasing series lengths for GLS and MK-TFPW tests under weak trend and strong autocorrelation further illustrate the "masking" effect of autocorrelation on trend detection. This result supports the work of others [e.g. @Wagner2013] that have found small trend changes in short time series difficult to detect regardless of autocorrelation. The role of autocorrelation in making trend can in part can be explained by the variance of the random error used in our simulations ($\sigma^{2} = 0.54$). While this may be considered large relative to the our definition of weak trend, it was selected based on the properties of real ecosystem indicators.
 
 As shown in Figure \ref{Fig2}, there is no solution in small sample sizes; however, we do not suggest there is no value in assigning trends to time series. Instead, we advise that a "shotgun" approach to assessing trends in many indicator time series without consideration of error structure and series lengths will likely lead to both Type I and Type II error. If the binary approach of hypothesis testing is to be implemented in ecosystem indicator reporting, a more hands-on approach should be implemented to determine indicators that are well-suited for trend analysis (e.g. a long series with low variance and weak autocorrelation). Further, the results of this study showed that the GLS approach to modeling trend ameliorated error rates compared to the Mann-Kendall test with trend-free pre-whitening. The parametric approach also carries the benefits of modeling trend uncertainty and coefficients, given the assumed probability distribution.
 
@@ -1413,6 +1445,7 @@ ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
 
 ```
 
+\newpage
 
 
-##References
+## References
