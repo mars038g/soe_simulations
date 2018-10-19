@@ -285,11 +285,31 @@ strongAR <- 0.8
 
 ```
 
+
+
+
+\centerline{Sean Hardison}
+\centerline{Northeast Fisheries Science Center, Woods Hole, MA, 02543-1026, USA}
+\centerline{sean.hardison@noaa.gov} \  
+
+\centerline{Charles Perretti}
+\centerline{Northeast Fisheries Science Center, Woods Hole, MA, 02543-1026, USA}
+\centerline{charles.perretti@noaa.gov} \  
+
+\centerline{Geret DePiper}
+\centerline{Northeast Fisheries Science Center, Woods Hole, MA, 02543-1026, USA}
+\centerline{geret.depiper@noaa.gov} \  
+
+\centerline{Andrew Beet}
+\centerline{Northeast Fisheries Science Center, Woods Hole, MA, 02543-1026, USA}
+\centerline{andrew.beet@noaa.gov} \  
+
 ## Abstract
 
 The identification of trends in ecosystem indicators has become a core component of ecosystem approaches to resource management, although oftentimes assumptions of statistical models are not properly accounted for in the reporting process. To explore the limitations of trend analysis of short times series, we applied three common methods of trend detection, including a generalized least squares model selection approach, the Mann-Kendall test, and Mann-Kendall test with trend-free pre-whitening to simulated time series of varying trend and autocorrelation strengths. Our results suggest that the ability to detect trends in time series is hampered by the influence of autocorrelated residuals in short series lengths. While it is known that tests designed to account for autocorrelation will approach nominal rejection rates as series lengths increase, the results of this study indicate biased rejection rates in the presence of even weak autocorrelation for series lengths often encountered in indicators developed for ecosystem-level reporting (N = 10, 20, 30). This work has broad implications for ecosystem-level reporting, where indicator time series are often limited in length, maintain a variety of error structures, and typically are assessed using a single statistical method applied uniformly across all time series. If a hypothesis testing approach for indicator trend analysis is to be implemented, we suggest first characterizing candidate series based on suitability (e.g. based on variance, autocorrelation, and series length) rather than a uniform application of tests for trend. A parametric approach to trend assessment could then be used to provide estimates of uncertainty and trend strengths from probability distributions.
-
-\textbf{Keywords}: Ecosystem-based fisheries management, trend analysis, time series
+\newline
+\newline
+\textbf{Keywords}: Ecosystem-based fisheries management; trend analysis; ecosystem indicators
 
 
 \newpage
@@ -1447,5 +1467,8 @@ ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
 
 \newpage
 
+## Acknowledgements 
+
+We would like to thank the members of the State of the Ecosystem Synthesis Working Groups and members of the ICES Working Group on the Northwest Atlantic Regional Sea (WGNARS) for providing valuable feedback during the preliminary phases of writing this manuscript. Support for this work was provided by the NOAA Integrated Ecosystem Assessment Program.
 
 ## References
