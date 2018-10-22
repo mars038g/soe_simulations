@@ -304,6 +304,7 @@ strongAR <- 0.8
 \centerline{Northeast Fisheries Science Center, Woods Hole, MA, 02543-1026, USA}
 \centerline{andrew.beet@noaa.gov} \  
 
+\linenumbers
 ## Abstract
 
 The identification of trends in ecosystem indicators has become a core component of ecosystem approaches to resource management, although oftentimes assumptions of statistical models are not properly accounted for in the reporting process. To explore the limitations of trend analysis of short times series, we applied three common methods of trend detection, including a generalized least squares model selection approach, the Mann-Kendall test, and Mann-Kendall test with trend-free pre-whitening to simulated time series of varying trend and autocorrelation strengths. Our results suggest that the ability to detect trends in time series is hampered by the influence of autocorrelated residuals in short series lengths. While it is known that tests designed to account for autocorrelation will approach nominal rejection rates as series lengths increase, the results of this study indicate biased rejection rates in the presence of even weak autocorrelation for series lengths often encountered in indicators developed for ecosystem-level reporting (N = 10, 20, 30). This work has broad implications for ecosystem-level reporting, where indicator time series are often limited in length, maintain a variety of error structures, and typically are assessed using a single statistical method applied uniformly across all time series. If a hypothesis testing approach for indicator trend analysis is to be implemented, we suggest first characterizing candidate series based on suitability (e.g. based on variance, autocorrelation, and series length) rather than a uniform application of tests for trend. A parametric approach to trend assessment could then be used to provide estimates of uncertainty and trend strengths from probability distributions.
@@ -586,7 +587,7 @@ Y_{t} = \alpha_{0} + \alpha_{1}X_{t} + \varepsilon_{t} \\
 
 where $Y_{t}$ is the simulated series at time $t$, $\alpha_{1}$ is the slope component, and $\varepsilon_{t}$ is the AR1 error process; the strength of which is given by $\rho$, with the error component $\omega_{t}$ assumed to be derived from Gaussian white noise. Through the preliminary analysis detailed above, the levels of $\alpha_{1}$ were 0.026, 0.051, and 0.147, which we combined with three levels of $\rho$: 0, 0.43, and 0.8. For each trend strength, autocorrelation strength, and time series length, 1000 simulations were performed. To test the null hypothesis of no trend in simulated time series, we used a generalized least squares (GLS) model selection process, Mann Kendall test, and Mann Kendall test with trend-free pre-whitening. 
 
-We focused our analyses on rejection rates of the null hypothesis of no trend, as this methodology is a common framework for assessing the flexibility of trend models to deviations from assumptions [e.g. @Yue2002a; @Yue2002b]. Further, null hypothesis testing is often applied in ecosystem indicator reporting for assessing trend [e.g. @NEFSC2018a; @NEFSC2018b]. We chose to extend this analysis of rejection rates for the scenario of no trend and strong autocorrelation to larger sample sizes (N = 50-650) to highlight the shortcoming of small sample sizes when strong autocorrelation is present. Our final analysis compared the efficacy of the non-parametric Sen's slope to the GLS estimator for assigning linear trend to data where trend was found to be significant (P < 0.05). 
+We focused our analyses on rejection rates of the null hypothesis of no trend, as this methodology is a common framework for assessing the flexibility of trend models to deviations from assumptions [e.g. @Yue2002a; @Yue2002b]. Further, null hypothesis testing is often applied in ecosystem indicator reporting for assessing trend [e.g. @NEFSC2018a; @NEFSC2018b]. We chose to extend this analysis of rejection rates for the scenario of no trend and strong autocorrelation to larger sample sizes (N = 50-650) to highlight the shortcoming of small sample sizes when strong autocorrelation is present. To ensure the simulated output approached asymptotic error rates, we also increased the number of simulations in this scenario to 1500 runs. Our final analysis compared the efficacy of the non-parametric Sen's slope to the GLS estimator for assigning linear trend to data where trend was found to be significant (P < 0.05). 
 
 #### Generalized least squares
 
@@ -607,7 +608,7 @@ The above model follows the same notation as our simulated series. Setting $\alp
 
 #### Mann Kendall test
 
-Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) [@mann1945; @kendall1955] and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW)[@Yue2002b]. The MK test is a nonparametric test for trend that assumes sample data are independent and identically distributed. Serial correlation within sample data has been found to lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test [@Kulkarni1995]. Residual pre-whitening is a common correction to address autocorrelation within MK tests, although pre-whitening is known to reduce the magnitude of existing trend [@Yue2002a]. The MK with trend-free pre-whitening is a step-wise procedure developed by @Yue2002b to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
+Further tests for trend in simulated time series were performed using the Mann-Kendall test (MK) [@mann1945; @kendall1955] and the more robust Mann-Kendall test with trend-free pre-whitening (MK-TFPW)[@Yue2002b]. The MK test for trend is a nonparametric approach that assumes sample data are independent and identically distributed. Serial correlation within sample data has been found to lead to inflated rejection rates of the null hypothesis of no trend if no correction steps are applied to the MK test [@Kulkarni1995]. Residual pre-whitening is a common correction to address autocorrelation within MK tests, although pre-whitening is known to reduce the magnitude of existing trend [@Yue2002a]. The MK with trend-free pre-whitening is a step-wise procedure developed by @Yue2002b to address issues introduced by pre-whitening, and is further detailed below. Under both MK and MK-TFPW frameworks, Kendall's tau statistic is given by:
 
 
 
@@ -1037,13 +1038,12 @@ levels(p_agg$test) <- c("GLS","Mann-Kendall","MK-TFPW")
 names(p_agg)[4] <- "Method"
 ggplot(p_agg, aes(color = Method, y = prop, 
                   x = series.length)) +
-  geom_bar(aes(fill = Method), stat = "identity",  position="dodge2",
-            size = 0.5) +
+  geom_bar(aes(fill = Method), stat = "identity",  position="dodge",
+            size = 0.5, color = "black") +
   facet_grid(trend ~ ar, labeller = labeller(tbl)) +
   ylab("Proportion significant") +
   xlab("Series length") +
-  scale_color_brewer(palette = "Paired") +
-  scale_fill_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "PuBu", direction = -1) +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
@@ -1068,12 +1068,12 @@ levels(pow$test) <- c("GLS","Mann-Kendall","MK-TFPW")
 names(pow)[2] <- "Method"
 
 ggplot(pow, aes(x = series.length, y = rej_prop, group = Method,fill = Method)) +
-  geom_bar(stat = "identity",position="dodge") +
+  geom_bar(stat = "identity",position="dodge", color = "black") +
   geom_hline(yintercept=0.05, linetype="dashed", 
              color = "red", size=1) +
   ylab("Proportion significant") +
   xlab("Series length") +
-  scale_fill_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "PuBu", direction = -1) +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
@@ -1163,7 +1163,7 @@ ggplot(df, aes(factor(series.length), slope_pred)) +
   facet_grid(trend ~ ar) +
   ylab("Predicted slope") +
   xlab("Series length") +
-  scale_fill_brewer(palette = "Paired") +
+  scale_fill_brewer(palette = "PuBu") +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
@@ -1217,11 +1217,15 @@ stdev <- stdev %>% mutate(Autocorrelation, Autocorrelation = plyr::mapvalues(Aut
 
 ggplot(data = stdev) + geom_line(aes(x = Autocorrelation, y = stdev,
                                      group = `Trend strength`, color = `Trend strength`),
-                                 size = 2) + 
+                                 size = 1) +
+  # geom_point(aes(x = Autocorrelation, y = stdev,
+  #                                    group = `Trend strength`),
+  #            color = "black",
+  #                                size = 1)+
   facet_grid(`Method` ~ `Series length`)+
   ylab("Standard deviation of trend estimates") +
   xlab(expression(paste("Autocorrelation (",rho,")"))) +
-  scale_color_brewer(palette = "Paired") +
+  scale_color_brewer(palette = "Spectral", direction = -1) +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
@@ -1454,8 +1458,8 @@ trend_names <- c(`ltrendstrong`="Strong trend",
 #... + facet_grid(hospital ~ ., labeller = as_labeller(hospital_names))
 
 ggplot(sim_table, aes(color = `Series length`,x = value, y = n)) +
-  geom_bar(aes(fill = `Series length`),stat = "identity", position = "dodge", color = "steelblue",
-           size = 0.1) +
+  geom_bar(aes(fill = `Series length`),stat = "identity", position = "dodge", 
+           size = 0.1, color = "black") +
   ylab("Fraction of Total Observations in Decile") +
   xlab("Decile") +
   scale_x_discrete(limits = c(1:10)) +
