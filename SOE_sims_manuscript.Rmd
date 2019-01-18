@@ -276,7 +276,8 @@ set.seed(123)
 
 run <- F #Run simulations or pull from previous results
 n = 1000 #number of simulations
-ARsd <- .54^.5 #standard deviation of innovations
+ARsd <- .54^.5 #standard deviation of time series
+ARsd_up95 <- 0.93^.5 #95% CI for variance
 
 #AR strengths
 NOAR <- list()
@@ -333,7 +334,7 @@ Results indicate that correctly identifying trends is problematic using less tha
 
 Parameters used in simulations were chosen based on preliminary analyses characterizing the distribution of trend and autocorrelation strengths across 124 time series that were candidates for inclusion in the 2017 State of the Ecosystem (SOE) reports [@NEFSC2018a; @NEFSC2018b] (Fig. 1). Trends in these candidate time series were characterized by linear regression, with the mean and upper 95% confidence interval for slopes chosen for representation in simulations. The $\rho$ components of SOE time series were estimated by maximum likelihood estimation (MLE), and the distribution mean was chosen as our "medium autocorrelation" parameter for simulated series. To reasonably parameterize simulation innovation variance, we fit all residual series with an AR(1) model estimating innovation variance using MLE, and then found the mean of the resulting distribution of variances.
 
-```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and innovation variances (C) in time series considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and the dashed red line (A) shows the upper 95\\% confidence interval for estimated trend slopes. \\label{Fig1}"}
+```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}"}
 load('data.dir/SOE_data_2017.RData')
 
 fields <- c('GOM Benthos Landings','GOM Mesoplanktivore Landings',
@@ -488,7 +489,7 @@ lin_coefficients <- data.frame("Fields"  = fields,
                                "Intercept" = beta_lin[1,],
                                "beta1" = beta_lin[2,])
 
-#AR
+#AR1
 AR_coef <- NULL
 arima_intercept <- NULL
 sigma2 <- NULL
@@ -502,6 +503,24 @@ arima_lin_df <- data.frame("Fields" = fields,
                            "AR1 Coef"=AR_coef,
                            "Intercept" = arima_intercept,
                            "Variance" = sigma2)
+
+#Estimate AR2 by conditional sum of squares
+
+# ar.apply <- safely(arima, otherwise = NA_real_)
+#   out <- ar.apply(x = x.ts, order = c(2,0,0), include.mean = TRUE, method = "CSS")
+#   if (!is.null(out[[1]])) ar2 <- out$result$coef[2]
+# 
+# ar2.out <- SOE.data %>%
+#     group_by(Var) %>%
+#     arrange(Time) %>%
+#     filter(Time > 1968) %>%
+#     dplyr::summarise(ar2 = ar.apply(x = Value,
+#                                     order = c(2,0,0),
+#                                     include.mean = TRUE,
+#                                     method = "CSS")$result$coef[2])
+  
+
+
 #summaries
 abs_beta <- abs(beta_lin[2,])
 mean_beta1_linear <- mean(abs_beta)
@@ -510,6 +529,10 @@ upper_95_beta1 <- quantile(x = abs_beta, probs = 0.95)
 mean_AR_coef_lin <- mean(AR_coef)
 
 mean_AR_var <- mean(arima_lin_df$Variance)
+
+iv_mean <- mean(arima_lin_df$Variance)
+upper_95_iv <- quantile(x = arima_lin_df$Variance, probs = 0.95)
+
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
   geom_histogram(bins = 124, binwidth = 0.01,
@@ -555,7 +578,8 @@ iv <- ggplot(data = arima_lin_df, aes(x = Variance)) +
                      limits = c(0,18)) +
   xlab("Innovation variance") +
   ylab("") +
-  geom_vline(aes(xintercept = mean_AR_var), col = "indianred", size = 1) +
+  geom_vline(aes(xintercept = iv_mean), col = "indianred", size = 1) +
+  geom_vline(aes(xintercept = upper_95_iv), col = "indianred", size = 1, linetype = "dashed") +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
@@ -720,8 +744,8 @@ Y_{t} = Y_{t}^{'} + bt.
 ```{r assessing model power, echo = F}
 #Initialize null data.frame
 
-sim_results <-data.frame(matrix(ncol = 10, nrow = 0))
-names(sim_results) <- c("test","series.length", "n","trend", "ar", "mae", "rmse", "p","mean_pred","mean_true")
+sim_results <-data.frame(matrix(ncol = 11, nrow = 0))
+names(sim_results) <- c("test","series.length", "n","trend", "ar", "mae", "rmse", "p","mean_pred","mean_true","var")
 
 if (run){
 
@@ -732,7 +756,7 @@ for (m in c(10,20,30)){
   ltrendweak <- -0.262 + (0.0255 * c(1:m)) 
   ltrendmed <- -0.262 + (0.051 * c(1:m)) 
   ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
-  print(paste("m =",m))
+  
   
   #Trend strength
   for (k in c("notrend","ltrendweak","ltrendmed","ltrendstrong")){
@@ -742,123 +766,129 @@ for (m in c(10,20,30)){
       
       true_trend <- get(k)
       
-      for (i in 1:n){
-        
-        print(i)
-        #generate simulations
-        dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = ARsd)
-        if (j != "NOAR"){
-          dat[1] <- rnorm(1,mean=0,sd=sqrt((ARsd^2)/(1-get(j)^2)))
-        }
-        
-        #add autocorrelated error structure to trend
-        dat <- get(k) + dat
-        dat <- data.frame(series = dat,
-                          time = 1:length(dat))
-        
-        #---------------------------------GLS---------------------------------#
-        #Correctly specifies model when no AR error in simulated time series
-        if (j == "NOAR"){
-          gls_sim <- fit_lm(dat = dat, spec = TRUE, trend = trend,
-                            ar = unlist(get(k)), m = x, ARsd = ARsd)
-        } else {
-          gls_sim <- fit_lm(dat = dat, trend = trend,
-                            ar = unlist(get(k)),m = x, ARsd = ARsd)
-        }
-        
-        #Get prediction or assign NA if broken
-        if (is.na(gls_sim[1])){
-          gls_mae <- NA
-          gls_rmse <- NA
-          pval <- NA
-          slope_pred <- NA
-          slope_true <- NA
+      for (v in c("ARsd","ARsd_up95")){
+        print(paste("m =",m, "k =",k,"j =",j,"v =",v))
+        for (i in 1:n){
           
-        } else {
-          newtime <- seq(1, m, 1)
-          newdata <- data.frame(time = newtime,
-                                time2 = newtime^2)
-          gls_pred <- AICcmodavg::predictSE(gls_sim$model,
-                                            newdata = newdata,
-                                            se.fit = F)
-          slope_pred <- gls_pred[2] - gls_pred[1]
-          
-          if (slope_pred != gls_pred[3] - gls_pred[2]){
-            slope_pred <- NA
+          print(i)
+          #generate simulations
+          dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = get(v))
+          if (j != "NOAR"){
+            dat[1] <- rnorm(1,mean=0,sd=sqrt((get(v)^2)/(1-get(j)^2)))
           }
           
-          ##Get error
-          gls_rmse <- sqrt(mean((gls_pred - true_trend)^2))
-          gls_mae <- mean(abs(gls_pred - true_trend))
-          pval <- gls_sim$best_lm$pval
-        }
-        
-        
-        if (k == "ltrendweak"){
-          slope_true <- 0.0255
-        } else if (k == "notrend"){
-          slope_true <- 0
-        } else if (k == "ltrendmed"){
-          slope_true <- 0.051
-        } else if (k == "ltrendstrong"){
-          slope_true <- 0.147
-        }
-        
-        #Results DF
-        gls_df <- data.frame(test = "gls",
-                             series.length = m,
-                             n = i,
-                             trend = k,
-                             ar = j,
-                             mae = gls_mae,
-                             rmse = gls_rmse,
-                             p = pval,
-                             slope_pred = slope_pred,
-                             slope_true = slope_true)
-
-        #---------------------------------MK---------------------------------#
-        mk <- MannKendall(dat$series)
-        mk_p <- unlist(mk[2])
-        
-        mk_df <- data.frame(test = "mk",
-                             series.length = m,
-                             n = i,
-                             trend = k,
-                             ar = j,
-                             mae = NA,
-                             rmse = NA,
-                             p = mk_p,
-                             slope_pred = NA,
-                             slope_true = NA)
-        
-        #---------------------------------MK-TFPW---------------------------------#
-        pw <- zyp.trend.vector(dat$series,method='yuepilon')
-        
-        pw_pred <- pw[[11]] + 1:m * pw[[2]]
-        pw_rmse <- sqrt(mean((pw_pred - true_trend)^2))
-        pw_mae <- mean(abs(pw_pred - true_trend))
-        pw_p <- pw[6]
-        slope_pred <- pw[[2]]
-        
-        pw_df <- data.frame(test = "pw",
-                            series.length = m,
-                            n = i,
-                            trend = k,
-                            ar = j,
-                            mae = pw_mae,
-                            rmse = pw_rmse,
-                            p = pw_p,
-                            slope_pred = slope_pred,
-                            slope_true = slope_true)
-        
-        int_df <- rbind(gls_df, mk_df, pw_df)
-        assign('sim_results',rbind(sim_results, int_df))
-        
-    } 
+          #add autocorrelated error structure to trend
+          dat <- get(k) + dat
+          dat <- data.frame(series = dat,
+                            time = 1:length(dat))
+          
+          #---------------------------------GLS---------------------------------#
+          #Correctly specifies model when no AR error in simulated time series
+          if (j == "NOAR"){
+            gls_sim <- fit_lm(dat = dat, spec = TRUE, trend = trend,
+                              ar = unlist(get(k)), m = x, ARsd = get(v))
+          } else {
+            gls_sim <- fit_lm(dat = dat, trend = trend,
+                              ar = unlist(get(k)),m = x, ARsd = get(v))
+          }
+          
+          #Get prediction or assign NA if broken
+          if (is.na(gls_sim[1])){
+            gls_mae <- NA
+            gls_rmse <- NA
+            pval <- NA
+            slope_pred <- NA
+            slope_true <- NA
+            
+          } else {
+            newtime <- seq(1, m, 1)
+            newdata <- data.frame(time = newtime,
+                                  time2 = newtime^2)
+            gls_pred <- AICcmodavg::predictSE(gls_sim$model,
+                                              newdata = newdata,
+                                              se.fit = F)
+            slope_pred <- gls_pred[2] - gls_pred[1]
+            
+            if (slope_pred != gls_pred[3] - gls_pred[2]){
+              slope_pred <- NA
+            }
+            
+            ##Get error
+            gls_rmse <- sqrt(mean((gls_pred - true_trend)^2))
+            gls_mae <- mean(abs(gls_pred - true_trend))
+            pval <- gls_sim$best_lm$pval
+          }
+          
+          
+          if (k == "ltrendweak"){
+            slope_true <- 0.0255
+          } else if (k == "notrend"){
+            slope_true <- 0
+          } else if (k == "ltrendmed"){
+            slope_true <- 0.051
+          } else if (k == "ltrendstrong"){
+            slope_true <- 0.147
+          }
+          
+          #Results DF
+          gls_df <- data.frame(test = "gls",
+                               series.length = m,
+                               n = i,
+                               trend = k,
+                               ar = j,
+                               mae = gls_mae,
+                               rmse = gls_rmse,
+                               p = pval,
+                               slope_pred = slope_pred,
+                               slope_true = slope_true,
+                               var = v)
+  
+          #---------------------------------MK---------------------------------#
+          mk <- MannKendall(dat$series)
+          mk_p <- unlist(mk[2])
+          
+          mk_df <- data.frame(test = "mk",
+                               series.length = m,
+                               n = i,
+                               trend = k,
+                               ar = j,
+                               mae = NA,
+                               rmse = NA,
+                               p = mk_p,
+                               slope_pred = NA,
+                               slope_true = NA,
+                               var = v)
+          
+          #---------------------------------MK-TFPW---------------------------------#
+          pw <- zyp.trend.vector(dat$series,method='yuepilon')
+          
+          pw_pred <- pw[[11]] + 1:m * pw[[2]]
+          pw_rmse <- sqrt(mean((pw_pred - true_trend)^2))
+          pw_mae <- mean(abs(pw_pred - true_trend))
+          pw_p <- pw[6]
+          slope_pred <- pw[[2]]
+          
+          pw_df <- data.frame(test = "pw",
+                              series.length = m,
+                              n = i,
+                              trend = k,
+                              ar = j,
+                              mae = pw_mae,
+                              rmse = pw_rmse,
+                              p = pw_p,
+                              slope_pred = slope_pred,
+                              slope_true = slope_true,
+                               var = v)
+          
+          int_df <- rbind(gls_df, mk_df, pw_df)
+          assign('sim_results',rbind(sim_results, int_df))
+          
+        } 
+    }
    }
   }
 }
-  save(sim_results, file = file.path(data.dir,paste0("sim_results",Sys.Date(),".Rdata")))
+  #save(sim_results, file = file.path(data.dir,paste0("sim_results",Sys.Date(),".Rdata")))
 }
   
 
