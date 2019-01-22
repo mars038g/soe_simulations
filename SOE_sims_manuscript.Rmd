@@ -430,58 +430,74 @@ nlm <- function(field, lin = NULL, norm = NULL){
   out <- c(int, beta)
   return(out)
 }
-lm_resid <- function(field, lin = NULL, norm = NULL){
-  time <- SOE.data[SOE.data$Var == field,]$Time
-  end = max(time)
-  time = time[1:which(time == end)]
-  
-  var <- SOE.data[SOE.data$Var == field,]$Value
-  var <- var[1:length(time)]
-  
-  if(norm == TRUE){
-    var = (var-mean(var))/sd(var)
-  } else {
-    var = var
-  }
-  
-  if(lin == TRUE){
-    time <- c(1:length(time))
-    mod <- lm(var ~ time)$residuals
-  } else if (lin == FALSE){
-    time <- c(1:length(time))
-    time2 <- time^2
-    mod <- lm(var ~ time + time2)$residuals
-  }
-  return(mod)
+
+# lm_resid <- function(field, lin = NULL, norm = NULL){
+#   time <- SOE.data[SOE.data$Var == field,]$Time
+#   end = max(time)
+#   time = time[1:which(time == end)]
+#   
+#   var <- SOE.data[SOE.data$Var == field,]$Value
+#   var <- var[1:length(time)]
+#   
+#   if(norm == TRUE){
+#     var = (var-mean(var))/sd(var)
+#   } else {
+#     var = var
+#   }
+#   
+#   if(lin == TRUE){
+#     time <- c(1:length(time))
+#     mod <- lm(var ~ time)$residuals
+#   } else if (lin == FALSE){
+#     time <- c(1:length(time))
+#     time2 <- time^2
+#     mod <- lm(var ~ time + time2)$residuals
+#   }
+#   return(mod)
+# }
+
+#Estimate AR(p) parameters---------------------------------------------------
+handle_arima <- function(field, a){
+  tryCatch(
+    {
+      x.ts <- SOE.data %>% 
+        filter(Var == field) %>% 
+        mutate(Value = (Value-mean(.$Value))/sd(.$Value)) %>% #normalize
+        arrange(Time) %>% #arrange
+        pull(Value)
+      
+      mod <- arima(x = x.ts, order = c(a,0,0), include.mean = TRUE)
+      
+      if (a == 2){
+        out <- data.frame(ar1 = mod$coef[1],
+                          ar2 = mod$coef[2],
+                          var = mod$sigma2,
+                          field = field)
+      } else {
+        out <- data.frame(ar1 = mod$coef[1],
+                          ar2 = NA,
+                          var = mod$sigma2,
+                          field = field)
+      }
+      return(out)
+    },
+    error=function(error_message) {
+      message(error_message)
+      return(NA)
+    }
+  )
 }
 
+#estimate AR1
+ar1.out <- do.call(rbind,
+                   mapply(handle_arima, fields, a = 1))
 
-
-get_dat <- function(field,norm = NULL){
-  time <- SOE.data[SOE.data$Var == field,]$Time
-  end = max(time)
-  time = time[1:which(time == end)]
-  
-  var <- SOE.data[SOE.data$Var == field,]$Value
-  var <- var[1:length(time)]
-  
-  
-  if(norm == TRUE){
-    var = (var-mean(var))/sd(var)
-  } else {
-    var = var
-  }
-  
-  out <- data.frame(var = field,
-                    value = var,
-                    time = time)
-  
-  return(out)
-  
-}
+#estimate AR2
+ar2.out <- do.call(rbind,
+                   mapply(handle_arima, fields, a = 2))
 
 #residuals
-lin_resid <- mapply(lm_resid,fields, lin = TRUE, norm = TRUE)
+# lin_resid <- mapply(lm_resid,fields, lin = TRUE, norm = TRUE)
 
 #linear coefficients
 beta_lin <- mapply(nlm, fields, lin = TRUE, norm = TRUE)
@@ -489,49 +505,41 @@ lin_coefficients <- data.frame("Fields"  = fields,
                                "Intercept" = beta_lin[1,],
                                "beta1" = beta_lin[2,])
 
-#AR1
-AR_coef <- NULL
-arima_intercept <- NULL
-sigma2 <- NULL
-for (i in 1:length(lin_resid)){
-  z <- arima(lin_resid[[i]], c(1,0,0))
-  AR_coef[i] <- z$coef[1]
-  arima_intercept[i] <- z$coef[2]
-  sigma2[i] <- z$sigma2
-}
-arima_lin_df <- data.frame("Fields" = fields,
-                           "AR1 Coef"=AR_coef,
-                           "Intercept" = arima_intercept,
-                           "Variance" = sigma2)
-
-#Estimate AR2 by conditional sum of squares
-
-# ar.apply <- safely(arima, otherwise = NA_real_)
-#   out <- ar.apply(x = x.ts, order = c(2,0,0), include.mean = TRUE, method = "CSS")
-#   if (!is.null(out[[1]])) ar2 <- out$result$coef[2]
-# 
-# ar2.out <- SOE.data %>%
-#     group_by(Var) %>%
-#     arrange(Time) %>%
-#     filter(Time > 1968) %>%
-#     dplyr::summarise(ar2 = ar.apply(x = Value,
-#                                     order = c(2,0,0),
-#                                     include.mean = TRUE,
-#                                     method = "CSS")$result$coef[2])
-  
+# #AR1
+# AR_coef <- NULL
+# arima_intercept <- NULL
+# sigma2 <- NULL
+# for (i in 1:length(lin_resid)){
+#   z <- arima(lin_resid[[i]], c(1,0,0))
+#   AR_coef[i] <- z$coef[1]
+#   arima_intercept[i] <- z$coef[2]
+#   sigma2[i] <- z$sigma2
+# }
+# arima_lin_df <- data.frame("Fields" = fields,
+#                            "AR1 Coef"=AR_coef,
+#                            "Intercept" = arima_intercept,
+#                            "Variance" = sigma2)
 
 
-#summaries
-abs_beta <- abs(beta_lin[2,])
+
+#summaries-----------------------------------------------------------------
+
+#regression slopes
+abs_beta <- abs(beta_lin[2,]) 
 mean_beta1_linear <- mean(abs_beta)
 lower_95_beta1 <- quantile(x = abs_beta, probs = 0.05)
 upper_95_beta1 <- quantile(x = abs_beta, probs = 0.95)
-mean_AR_coef_lin <- mean(AR_coef)
 
-mean_AR_var <- mean(arima_lin_df$Variance)
+#AR(1)
+mean_ar1 <- mean(ar1.out$ar1, na.rm = T)
+iv_mean_ar1 <- mean(ar1.out$var, na.rm = T)
+upper_95_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.95, na.rm = TRUE)
 
-iv_mean <- mean(arima_lin_df$Variance)
-upper_95_iv <- quantile(x = arima_lin_df$Variance, probs = 0.95)
+#AR(2)
+mean_ar2_coef1 <- mean(ar2.out$ar1, na.rm = T)
+mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
+iv_mean_ar2 <- mean(ar2.out$var, na.rm = T)
+upper_95_iv_ar2 <- quantile(x = ar2.out$var, probs = 0.95, na.rm = TRUE)
 
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
@@ -552,41 +560,58 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         strip.text = element_text(size = 10)) +
   annotate("text", x = 0, y = 17, label = "A")
 
-ar <- ggplot(data = arima_lin_df, aes(x = abs(AR1.Coef))) +
+# ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
+#   geom_histogram(bins = 124, binwidth = 0.05,
+#                  fill = "lightblue", color = "black",
+#                  position = "dodge") +
+#   scale_y_continuous(expand = c(0,0),
+#                      limits = c(0,13)) +
+#   xlab(expression(rho)) +
+#   ylab("") +
+#   geom_vline(aes(xintercept = mean_ar1), col = "indianred", size = 1) +
+#   theme_bw() +
+#   theme(plot.title = element_blank(),
+#         strip.background = element_blank(),
+#         axis.text = element_text(size = 9),
+#         axis.title = element_text(size = 10),
+#         strip.text = element_text(size = 10))  +
+#   annotate("text", x = min(ar1.out$ar1, na.rm = TRUE)*1.05, y = 12, label = "B")
+# 
+# ar2 <- ggplot(data = ar2.out, aes(x = ar2)) +
+#   geom_histogram(bins = 124, binwidth = 0.05,
+#                  fill = "lightblue", color = "black",
+#                  position = "dodge") +
+#   scale_y_continuous(expand = c(0,0),
+#                      limits = c(0,16)) +
+#   xlab(expression(rho)) +
+#   ylab("") +
+#   geom_vline(aes(xintercept = mean_ar2_coef2), col = "indianred", size = 1) +
+#   theme_bw() +
+#   theme(plot.title = element_blank(),
+#         strip.background = element_blank(),
+#         axis.text = element_text(size = 9),
+#         axis.title = element_text(size = 10),
+#         strip.text = element_text(size = 10))  +
+#   annotate("text", x = min(ar2.out$ar2, na.rm = TRUE)*1.05, y = 15, label = "C")
+
+
+iv <- ggplot(data = ar1.out, aes(x = var)) +
   geom_histogram(bins = 124, binwidth = 0.05,
                  fill = "lightblue", color = "black",
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
-                     limits = c(0,18)) +
-  xlab(expression(rho)) +
+                     limits = c(0,16)) +
+  xlab("Variance") +
   ylab("") +
-  geom_vline(aes(xintercept = mean_AR_coef_lin), col = "indianred", size = 1) +
-  theme_bw() +
-  theme(plot.title = element_blank(),
-        strip.background = element_blank(),
-        axis.text = element_text(size = 9),
-        axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))  +
-  annotate("text", x = 0, y = 17, label = "B")
-
-
-iv <- ggplot(data = arima_lin_df, aes(x = Variance)) +
-  geom_histogram(bins = 124, binwidth = 0.05,
-                 fill = "lightblue", color = "black",
-                 position = "dodge") +
-  scale_y_continuous(expand = c(0,0),
-                     limits = c(0,18)) +
-  xlab("Innovation variance") +
-  ylab("") +
-  geom_vline(aes(xintercept = iv_mean), col = "indianred", size = 1) +
-  geom_vline(aes(xintercept = upper_95_iv), col = "indianred", size = 1, linetype = "dashed") +
+  geom_vline(aes(xintercept = iv_mean_ar1), col = "indianred", size = 1) +
+  geom_vline(aes(xintercept = upper_95_iv_ar1), col = "indianred", size = 1, linetype = "dashed") +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
         strip.text = element_text(size = 10)) +
-  annotate("text", x = 0, y = 17, label = "C")
+  annotate("text", x = 0, y = 15, label = "C")
 
 grid.arrange(arrangeGrob(beta, 
                          ar,
