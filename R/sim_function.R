@@ -23,13 +23,13 @@ test.series <- function(ar.order,
   if (ar.order == 1){
     ar.strength <- get(rho)
   } else {
-    rho <- rho
+    rho <- NA
     ar.strength <- c(mean_ar2_coef1,mean_ar2_coef2)
     var <- iv_mean_ar2
   }
   
   #Simulate
-  if (rho == "noAR" | is.na(NA)){
+  if (!is.na(rho) && rho == "noAR"){
     dat <- arima.sim(list(ar = list()),
                      n=series.length,
                      rand.gen=rnorm,
@@ -142,8 +142,5 @@ test.series <- function(ar.order,
     
     return(int_df)
 }
-
-
-
 
 

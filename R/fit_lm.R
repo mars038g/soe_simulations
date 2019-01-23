@@ -11,7 +11,7 @@ fit_lm <- function(dat, spec = FALSE, p = p){
     constant_ar <-
       try(nlme::gls(series ~ 1,
                     data = dat,
-                    correlation = corARMA(form = ~time, p = p, q = 0)))
+                    correlation = corARMA(form = ~1|time, p = p, q = 0)))
     if (class(constant_ar) == "try-error"){
       return(best_lm <- data.frame(model = NA,
                                    aicc  = NA,
@@ -42,7 +42,7 @@ fit_lm <- function(dat, spec = FALSE, p = p){
     linear_ar <- 
       try(nlme::gls(series ~ time, 
                     data = dat,
-                    correlation = corARMA(form = ~time, p = p, q = 0)))
+                    correlation = corARMA(form = ~1|time, p = p, q = 0)))
     if (class(linear_ar) == "try-error"){
       return(best_lm <- data.frame(model = NA,
                                    aicc  = NA,
@@ -76,7 +76,7 @@ fit_lm <- function(dat, spec = FALSE, p = p){
     poly_ar <-
       try(nlme::gls(series ~ time + time2,
                     data = dat,
-                    correlation = corARMA(form = ~time, p = p, q = 0)))
+                    correlation = corARMA(form = ~1|time, p = p, q = 0)))
     if (class(poly_ar) == "try-error"){
       return(best_lm <- data.frame(model = NA,
                                    aicc  = NA,

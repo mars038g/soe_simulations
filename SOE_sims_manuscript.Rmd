@@ -590,11 +590,10 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
     }
   }
 }
-
 #AR2
 out_ar2 <- NULL
 for (n in c(10,20,30)){
-  for (t in c("none","weak","med","strong")){
+   for (t in c("none","weak","med","strong")){
     for (i in 1:nsims){      
       if (i %in% seq(1,nsims,nsims/20)){
         print(paste("sim =",i,"series length =",n,"trend =",t))
@@ -609,10 +608,8 @@ for (n in c(10,20,30)){
     }
   }
 }
-
   
 }
-
 
 
 ```
