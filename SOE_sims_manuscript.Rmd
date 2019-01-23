@@ -14,15 +14,8 @@ documentclass: ouparticle
 
 
 ```{r setup, include=FALSE}
-# rmarkdown::render("SOE_simulations_methods.Rmd", "all") # for both pdf and html
-
-data.dir <- "data.dir/"
-knitr::opts_chunk$set(
-	echo = TRUE,
-	message = FALSE,
-	warning = FALSE,
-	fig.pos = 'H'
-)
+data.dir <- here::here("data.dir")
+r.dir <- here::here("R")
 
 # list of all packages required
 packages <- c("stringi","boot","tinytex","Kendall","zoo","zyp",
@@ -43,246 +36,43 @@ installLoadPackages(packages)
 ```
 
 ```{r functions, echo = F}
-#GLS-MS 
-fit_lm <- function(dat, ar, m, ARsd, trend, spec = FALSE){
-    dat <- dat %>% dplyr::filter(complete.cases(.))
-    
-    # Constant model (null model used to calculate 
-    # overall p-value)
-    constant_norm <-nlme::gls(series ~ 1, data = dat)
-    
-    #spec parameter specifies whether arima.sim incorporated AR(1) error process. When there is no 
-    #AR error in the time series, we switch the GLS models to all rely on a normal error generating process.
-    if (!spec){
-      constant_ar1 <-
-        try(nlme::gls(series ~ 1,
-                      data = dat,
-                      correlation = nlme::corAR1(form = ~time)))
-      if (class(constant_ar1) == "try-error"){
-        return(best_lm <- data.frame(model = NA,
-                                     aicc  = NA,
-                                     coefs..Intercept = NA,
-                                     coefs.time = NA,
-                                     coefs.time2 = NA,
-                                     pval = NA))
-      }
-      
-    } else {
-      constant_ar1 <-
-        try(nlme::gls(series ~ 1,
-                      data = dat))
-      if (class(constant_ar1) == "try-error"){
-        return(best_lm <- data.frame(model = NA,
-                                     aicc  = NA,
-                                     coefs..Intercept = NA,
-                                     coefs.time = NA,
-                                     coefs.time2 = NA,
-                                     pval = NA))
-      }
-    }
-    # Linear model with normal error
-    linear_norm <- nlme::gls(series ~ time, data = dat)
-    
-    # Linear model with AR1 error
-    if (!spec){
-      linear_ar1 <- 
-        try(nlme::gls(series ~ time, 
-                      data = dat,
-                      correlation = nlme::corAR1(form = ~time)))
-      if (class(linear_ar1) == "try-error"){
-        return(best_lm <- data.frame(model = NA,
-                                     aicc  = NA,
-                                     coefs..Intercept = NA,
-                                     coefs.time = NA,
-                                     coefs.time2 = NA,
-                                     pval = NA))
-        }
-      } else {
-        linear_ar1 <- 
-          try(nlme::gls(series ~ time, 
-                        data = dat))
-        if (class(linear_ar1) == "try-error"){
-          return(best_lm <- data.frame(model = NA,
-                                       aicc  = NA,
-                                       coefs..Intercept = NA,
-                                       coefs.time = NA,
-                                       coefs.time2 = NA,
-                                       pval = NA))
-      }
-    }
-    linear_phi <- linear_ar1$modelStruct$corStruct
-    linear_phi <-coef(linear_phi, unconstrained = FALSE)
-    
-    # Polynomial model with normal error
-    dat$time2 <- dat$time^2
-    poly_norm <- nlme::gls(series ~ time + time2, data = dat)
+#GLS model selection function
+source(file.path(r.dir,"fit_lm.R"))
 
-    # Polynomial model with AR1 error
-    if (!spec){
-      poly_ar1 <-
-        try(nlme::gls(series ~ time + time2,
-                      data = dat,
-                      correlation = nlme::corAR1(form = ~time)))
-      if (class(poly_ar1) == "try-error"){
-        return(best_lm <- data.frame(model = NA,
-                                     aicc  = NA,
-                                     coefs..Intercept = NA,
-                                     coefs.time = NA,
-                                     coefs.time2 = NA,
-                                     pval = NA))
+#A funciton to run simulations
+source(file.path(r.dir,"sim_function.R"))
 
-      }
-    }else {
-      poly_ar1 <-
-        try(nlme::gls(series ~ time + time2,
-                      data = dat))
-      if (class(poly_ar1) == "try-error"){
-        return(best_lm <- data.frame(model = NA,
-                                     aicc  = NA,
-                                     coefs..Intercept = NA,
-                                     coefs.time = NA,
-                                     coefs.time2 = NA,
-                                     pval = NA))
+#A function to create confusion matrices
+source(file.path(r.dir,"conf_mat.R"))
 
-      }
-    }
-    poly_phi <- poly_ar1$modelStruct$corStruct
-    poly_phi <- coef(poly_phi, unconstrained = FALSE)
-    
-    # Calculate AICs for all models
-    df_aicc <-
-      data.frame(model = c("poly_norm",
-                           "poly_ar1",
-                           "linear_norm",
-                           "linear_ar1"),
-                 aicc  = c(AICc(poly_norm),
-                           AICc(poly_ar1),
-                           AICc(linear_norm),
-                           AICc(linear_ar1)),
-                 coefs = rbind(coef(poly_norm),
-                               coef(poly_ar1),
-                               c(coef(linear_norm), NA),
-                               c(coef(linear_ar1),  NA)),
-                 phi = c(0, 
-                         poly_phi,
-                         0,
-                         linear_phi),
-                 # Calculate overall signifiance (need to use
-                 # ML not REML for this)
-                 pval = c(anova(update(constant_norm, method = "ML"),
-                               update(poly_norm, method = "ML"))$`p-value`[2],
-                          anova(update(constant_ar1, method = "ML"),
-                                update(poly_ar1, method = "ML"))$`p-value`[2],
-                          anova(update(constant_norm, method = "ML"),
-                                update(linear_norm, method = "ML"))$`p-value`[2],
-                          anova(update(constant_ar1, method = "ML"),
-                                update(linear_ar1, method = "ML"))$`p-value`[2]))
-    
-    best_lm <-
-      df_aicc %>%
-      dplyr::filter(aicc == min(aicc))
-    if (nrow(best_lm) >1){
-      best_lm <- best_lm[1,]
-    }
-    phi <- best_lm$phi
+#Simulation parameters
+load(file.path(data.dir, "sim_param.Rdata"))
 
-    
-    
-  if (best_lm$model == "poly_norm") {
-    model <- poly_norm
-  } else if (best_lm$model == "poly_ar1") {
-    model <- poly_ar1
-  } else if (best_lm$model == "linear_norm") {
-    model <- linear_norm
-  } else if (best_lm$model == "linear_ar1") {
-    model <- linear_ar1
-  }
-
-
-  return(list(best_lm = best_lm, 
-              model = model))
-}
+#2017 SOE report data
+load(file.path(data.dir,'SOE_data_2017.RData'))
 
 #Label facets
 label <- function(variable,value){
   return(facet_names[value])
 }
 
-#Confusion matrices
-conf_mat <- function(df, test, filt){
-  df <- df %>% filter(series.length == filt)
-  
-  #True positives
-  true_pos_frac <- nrow(df[df$series.length != "no trend" &
-                          df$p <= 0.05 &
-                          df$test == test,])
-  
-  true_pos_tot <- nrow(df[df$trend != "no trend" &
-                            df$test == test,])
-  
-  true_pos_freq <- true_pos_frac/true_pos_tot 
-  
-  #False positives
- 
-  false_pos_frac <- nrow(df[df$trend == "no trend" &
-                        df$p <= 0.05 &
-                        df$test == test,])
-  
-  false_pos_tot <- nrow(df[df$trend == "no trend" &
-                             df$test == test,])
-  
-  false_pos_freq <- false_pos_frac/false_pos_tot
-  
-  #False negatives
-
-  false_neg_frac <- nrow(df[df$trend != "no trend" &
-                         df$p >= 0.05 &
-                         df$test == test,])
-  
-  false_neg_tot <- nrow(df[df$trend != "no trend "&
-                             df$test == test,])
-  
-  false_neg_freq <- false_neg_frac/false_neg_tot
-  
-  #true
-  
-  true_neg_frac <- nrow(df[df$trend == "no trend" &
-                         df$p >= 0.05 &
-                         df$test == test,])
-
-  true_neg_tot <- nrow(df[df$trend == "no trend" &
-                            df$test == test,])
-  
-  true_neg_freq <- true_neg_frac/true_neg_tot
-
-  
-  conf_mat <- data.frame(x = c("actual no","actual yes","actual no","actual yes"),
-                         y = c('predicted no','predicted yes','predicted yes','predicted no'),
-                         val = c(round(true_neg_freq,3), round(true_pos_freq,3),
-                                 round(false_pos_freq,3),round(false_neg_freq,3)))
-  
-  return(conf_mat)
-}
-
 #Color palette
 pal <- colorRampPalette(c("white","darkred"))
-```
-
-```{r constants for simulations, echo = F}
 
 #set seed
 set.seed(123)
 
+#Choose to run simulations
+run <- F
+nsims <- 5000
 
-run <- F #Run simulations or pull from previous results
-n = 1000 #number of simulations
-ARsd <- .54^.5 #standard deviation of time series
-ARsd_up95 <- 0.93^.5 #95% CI for variance
-
-#AR strengths
-NOAR <- list()
-medAR <- 0.433
-strongAR <- 0.8
+# ARsd <- .54^.5 #standard deviation of time series
+# ARsd_up95 <- 0.93^.5 #95% CI for variance
+# 
+# #AR strengths
+# NOAR <- list()
+# medAR <- 0.433
+# strongAR <- 0.8
 
 ```
 
@@ -334,8 +124,8 @@ Results indicate that correctly identifying trends is problematic using less tha
 
 Parameters used in simulations were chosen based on preliminary analyses characterizing the distribution of trend and autocorrelation strengths across 124 time series that were candidates for inclusion in the 2017 State of the Ecosystem (SOE) reports [@NEFSC2018a; @NEFSC2018b] (Fig. 1). Trends in these candidate time series were characterized by linear regression, with the mean and upper 95% confidence interval for slopes chosen for representation in simulations. The $\rho$ components of SOE time series were estimated by maximum likelihood estimation (MLE), and the distribution mean was chosen as our "medium autocorrelation" parameter for simulated series. To reasonably parameterize simulation innovation variance, we fit all residual series with an AR(1) model estimating innovation variance using MLE, and then found the mean of the resulting distribution of variances.
 
-```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}"}
-load('data.dir/SOE_data_2017.RData')
+```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}", warning=FALSE}
+
 
 fields <- c('GOM Benthos Landings','GOM Mesoplanktivore Landings',
             'GOM Macroplanktivore Landings','GOM Macrozoo-piscivore Landings',
@@ -435,16 +225,16 @@ nlm <- function(field, lin = NULL, norm = NULL){
 #   time <- SOE.data[SOE.data$Var == field,]$Time
 #   end = max(time)
 #   time = time[1:which(time == end)]
-#   
+# 
 #   var <- SOE.data[SOE.data$Var == field,]$Value
 #   var <- var[1:length(time)]
-#   
+# 
 #   if(norm == TRUE){
 #     var = (var-mean(var))/sd(var)
 #   } else {
 #     var = var
 #   }
-#   
+# 
 #   if(lin == TRUE){
 #     time <- c(1:length(time))
 #     mod <- lm(var ~ time)$residuals
@@ -497,7 +287,7 @@ ar2.out <- do.call(rbind,
                    mapply(handle_arima, fields, a = 2))
 
 #residuals
-# lin_resid <- mapply(lm_resid,fields, lin = TRUE, norm = TRUE)
+lin_resid <- mapply(lm_resid,fields, lin = TRUE, norm = TRUE)
 
 #linear coefficients
 beta_lin <- mapply(nlm, fields, lin = TRUE, norm = TRUE)
@@ -505,7 +295,7 @@ lin_coefficients <- data.frame("Fields"  = fields,
                                "Intercept" = beta_lin[1,],
                                "beta1" = beta_lin[2,])
 
-# #AR1
+#AR1
 # AR_coef <- NULL
 # arima_intercept <- NULL
 # sigma2 <- NULL
@@ -522,6 +312,8 @@ lin_coefficients <- data.frame("Fields"  = fields,
 
 
 
+
+
 #summaries-----------------------------------------------------------------
 
 #regression slopes
@@ -532,6 +324,7 @@ upper_95_beta1 <- quantile(x = abs_beta, probs = 0.95)
 
 #AR(1)
 mean_ar1 <- mean(ar1.out$ar1, na.rm = T)
+upper_95_ar1 <- quantile(x = ar1.out$ar1, probs = 0.95, na.rm = TRUE)
 iv_mean_ar1 <- mean(ar1.out$var, na.rm = T)
 upper_95_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.95, na.rm = TRUE)
 
@@ -541,13 +334,18 @@ mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
 iv_mean_ar2 <- mean(ar2.out$var, na.rm = T)
 upper_95_iv_ar2 <- quantile(x = ar2.out$var, probs = 0.95, na.rm = TRUE)
 
+if (run = T){
+ save(mean_beta1_linear,lower_95_beta1,upper_95_beta1,
+     mean_ar1,upper_95_ar1,iv_mean_ar1,upper_95_iv_ar1,
+     mean_ar2_coef1,mean_ar2_coef2,iv_mean_ar2,upper_95_iv_ar2,file = "sim_param.rdata")
+}
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
-  geom_histogram(bins = 124, binwidth = 0.01,
+  geom_histogram(bins = 124, binwidth = 0.005,
                  fill = "lightblue", color = "black",
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
-                     limits = c(0,18)) +
+                     limits = c(0,16.5)) +
   xlab(expression(alpha[1])) +
   ylab("") +
   geom_vline(aes(xintercept = mean_beta1_linear), col = "indianred", size = 1) +
@@ -558,7 +356,7 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
         strip.text = element_text(size = 10)) +
-  annotate("text", x = 0, y = 17, label = "A")
+  annotate("text", x = 0, y = 15, label = "A")
 
 # ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
 #   geom_histogram(bins = 124, binwidth = 0.05,
@@ -600,7 +398,7 @@ iv <- ggplot(data = ar1.out, aes(x = var)) +
                  fill = "lightblue", color = "black",
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
-                     limits = c(0,16)) +
+                     limits = c(0,16.5)) +
   xlab("Variance") +
   ylab("") +
   geom_vline(aes(xintercept = iv_mean_ar1), col = "indianred", size = 1) +
@@ -611,10 +409,10 @@ iv <- ggplot(data = ar1.out, aes(x = var)) +
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
         strip.text = element_text(size = 10)) +
-  annotate("text", x = 0, y = 15, label = "C")
+  annotate("text", x = 0, y = 15, label = "B")
 
 grid.arrange(arrangeGrob(beta, 
-                         ar,
+                        #ar,
                          iv, 
                          nrow = 1,
                          left = textGrob("Frequency", rot = 90, vjust = 1)), nrow=1)
@@ -781,7 +579,6 @@ for (m in c(10,20,30)){
   ltrendweak <- -0.262 + (0.0255 * c(1:m)) 
   ltrendmed <- -0.262 + (0.051 * c(1:m)) 
   ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
-  
   
   #Trend strength
   for (k in c("notrend","ltrendweak","ltrendmed","ltrendstrong")){
