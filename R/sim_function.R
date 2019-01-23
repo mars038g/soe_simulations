@@ -7,7 +7,7 @@ library(zyp)
 load("sim_param.rdata")
 
 test.series <- function(ar.order,
-                        rho = NULL,
+                        rho,
                         series.length,
                         trend.strength,
                         var,
@@ -21,14 +21,15 @@ test.series <- function(ar.order,
   order <- c(ar.order,0,0)
   
   if (ar.order == 1){
-    ar.strength <- rho
+    ar.strength <- get(rho)
   } else {
+    rho <- rho
     ar.strength <- c(mean_ar2_coef1,mean_ar2_coef2)
     var <- iv_mean_ar2
   }
   
   #Simulate
-  if (!is.numeric(rho)){
+  if (rho == "noAR" | is.na(NA)){
     dat <- arima.sim(list(ar = list()),
                      n=series.length,
                      rand.gen=rnorm,
@@ -44,13 +45,14 @@ test.series <- function(ar.order,
                      n.start = NA) #Gives reasonable length of burn-in period
   }
   
+
   #add autocorrelated error structure to trend
   dat <- data.frame(series = true_trend + dat,
                     time = 1:length(dat))
   
   #fit gls model
   gls_sim <- fit_lm(dat = dat,
-                    ARsd = get(v))
+                    p = ar.order)
     
   if (is.na(gls_sim[1])){
     gls_mae <- NA
@@ -82,6 +84,8 @@ test.series <- function(ar.order,
     gls_df <- data.frame(test = "gls",
                          series.length = series.length,
                          n = nsims,
+                         rho1 = ar.strength[1],
+                         rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                          trend = trend.strength,
                          ar = ar.order,
                          mae = gls_mae,
@@ -99,6 +103,8 @@ test.series <- function(ar.order,
     mk_df <- data.frame(test = "mk",
                         series.length = series.length,
                         n = nsims,
+                        rho1 = ar.strength[1],
+                        rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                         trend = trend.strength,
                         ar = ar.order,
                         mae = NA,
@@ -121,6 +127,8 @@ test.series <- function(ar.order,
     pw_df <- data.frame(test = "pw",
                         series.length = series.length,
                         n = nsims,
+                        rho1 = ar.strength[1],
+                        rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                         trend = trend.strength,
                         ar = ar.order,
                         mae = pw_mae,
@@ -134,3 +142,8 @@ test.series <- function(ar.order,
     
     return(int_df)
 }
+
+
+
+
+

@@ -334,10 +334,13 @@ mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
 iv_mean_ar2 <- mean(ar2.out$var, na.rm = T)
 upper_95_iv_ar2 <- quantile(x = ar2.out$var, probs = 0.95, na.rm = TRUE)
 
+trend.df <- data.frame(Var = c("none","weak","med","strong"),
+                       Value = c(0,0.026, 0.051, 0.147))
+
 if (run = T){
  save(mean_beta1_linear,lower_95_beta1,upper_95_beta1,
      mean_ar1,upper_95_ar1,iv_mean_ar1,upper_95_iv_ar1,
-     mean_ar2_coef1,mean_ar2_coef2,iv_mean_ar2,upper_95_iv_ar2,file = "sim_param.rdata")
+     mean_ar2_coef1,mean_ar2_coef2,iv_mean_ar2,upper_95_iv_ar2,trend.df,file = "sim_param.rdata")
 }
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
@@ -565,154 +568,52 @@ Y_{t} = Y_{t}^{'} + bt.
 ## Results
 
 ```{r assessing model power, echo = F}
-#Initialize null data.frame
-
-sim_results <-data.frame(matrix(ncol = 11, nrow = 0))
-names(sim_results) <- c("test","series.length", "n","trend", "ar", "mae", "rmse", "p","mean_pred","mean_true","var")
-
 if (run){
-
-#Specify time series length
-for (m in c(10,20,30)){
-  
-  notrend <- rep(0,m)
-  ltrendweak <- -0.262 + (0.0255 * c(1:m)) 
-  ltrendmed <- -0.262 + (0.051 * c(1:m)) 
-  ltrendstrong <- -0.262 + (0.147 * c(1:m)) 
-  
-  #Trend strength
-  for (k in c("notrend","ltrendweak","ltrendmed","ltrendstrong")){
-    
-    #AR strength
-    for (j in c("strongAR","medAR","NOAR")){
-      
-      true_trend <- get(k)
-      
-      for (v in c("ARsd","ARsd_up95")){
-        print(paste("m =",m, "k =",k,"j =",j,"v =",v))
-        for (i in 1:n){
-          
-          print(i)
-          #generate simulations
-          dat <- arima.sim(list(ar = get(j)), n=m, rand.gen=rnorm, sd = get(v))
-          if (j != "NOAR"){
-            dat[1] <- rnorm(1,mean=0,sd=sqrt((get(v)^2)/(1-get(j)^2)))
-          }
-          
-          #add autocorrelated error structure to trend
-          dat <- get(k) + dat
-          dat <- data.frame(series = dat,
-                            time = 1:length(dat))
-          
-          #---------------------------------GLS---------------------------------#
-          #Correctly specifies model when no AR error in simulated time series
-          if (j == "NOAR"){
-            gls_sim <- fit_lm(dat = dat, spec = TRUE, trend = trend,
-                              ar = unlist(get(k)), m = x, ARsd = get(v))
-          } else {
-            gls_sim <- fit_lm(dat = dat, trend = trend,
-                              ar = unlist(get(k)),m = x, ARsd = get(v))
-          }
-          
-          #Get prediction or assign NA if broken
-          if (is.na(gls_sim[1])){
-            gls_mae <- NA
-            gls_rmse <- NA
-            pval <- NA
-            slope_pred <- NA
-            slope_true <- NA
-            
-          } else {
-            newtime <- seq(1, m, 1)
-            newdata <- data.frame(time = newtime,
-                                  time2 = newtime^2)
-            gls_pred <- AICcmodavg::predictSE(gls_sim$model,
-                                              newdata = newdata,
-                                              se.fit = F)
-            slope_pred <- gls_pred[2] - gls_pred[1]
-            
-            if (slope_pred != gls_pred[3] - gls_pred[2]){
-              slope_pred <- NA
-            }
-            
-            ##Get error
-            gls_rmse <- sqrt(mean((gls_pred - true_trend)^2))
-            gls_mae <- mean(abs(gls_pred - true_trend))
-            pval <- gls_sim$best_lm$pval
-          }
-          
-          
-          if (k == "ltrendweak"){
-            slope_true <- 0.0255
-          } else if (k == "notrend"){
-            slope_true <- 0
-          } else if (k == "ltrendmed"){
-            slope_true <- 0.051
-          } else if (k == "ltrendstrong"){
-            slope_true <- 0.147
-          }
-          
-          #Results DF
-          gls_df <- data.frame(test = "gls",
-                               series.length = m,
-                               n = i,
-                               trend = k,
-                               ar = j,
-                               mae = gls_mae,
-                               rmse = gls_rmse,
-                               p = pval,
-                               slope_pred = slope_pred,
-                               slope_true = slope_true,
-                               var = v)
-  
-          #---------------------------------MK---------------------------------#
-          mk <- MannKendall(dat$series)
-          mk_p <- unlist(mk[2])
-          
-          mk_df <- data.frame(test = "mk",
-                               series.length = m,
-                               n = i,
-                               trend = k,
-                               ar = j,
-                               mae = NA,
-                               rmse = NA,
-                               p = mk_p,
-                               slope_pred = NA,
-                               slope_true = NA,
-                               var = v)
-          
-          #---------------------------------MK-TFPW---------------------------------#
-          pw <- zyp.trend.vector(dat$series,method='yuepilon')
-          
-          pw_pred <- pw[[11]] + 1:m * pw[[2]]
-          pw_rmse <- sqrt(mean((pw_pred - true_trend)^2))
-          pw_mae <- mean(abs(pw_pred - true_trend))
-          pw_p <- pw[6]
-          slope_pred <- pw[[2]]
-          
-          pw_df <- data.frame(test = "pw",
-                              series.length = m,
-                              n = i,
-                              trend = k,
-                              ar = j,
-                              mae = pw_mae,
-                              rmse = pw_rmse,
-                              p = pw_p,
-                              slope_pred = slope_pred,
-                              slope_true = slope_true,
-                               var = v)
-          
-          int_df <- rbind(gls_df, mk_df, pw_df)
-          assign('sim_results',rbind(sim_results, int_df))
-          
-        } 
+#AR1
+out_ar1 <- NULL
+noAR <- 0
+for (r in c("noAR","mean_ar1","upper_95_ar1")){
+  for (n in c(10,20,30)){
+    for (t in c("none","weak","med","strong")){
+      for (i in 1:nsims){      
+        if (i %in% seq(1,nsims,nsims/20)){
+          print(paste("sim =",i,"series length =",n,"trend =",t,"ar =",r))
+        }
+        
+        assign("out_ar1",rbind(out_ar1, test.series(ar.order = 1,
+                                                    rho = r,
+                                                    series.length = n,
+                                                    trend.strength = t,
+                                                    var = iv_mean_ar2,
+                                                    nsims = nsims))) 
+      }
     }
-   }
   }
 }
-  #save(sim_results, file = file.path(data.dir,paste0("sim_results",Sys.Date(),".Rdata")))
+
+#AR2
+out_ar2 <- NULL
+for (n in c(10,20,30)){
+  for (t in c("none","weak","med","strong")){
+    for (i in 1:nsims){      
+      if (i %in% seq(1,nsims,nsims/20)){
+        print(paste("sim =",i,"series length =",n,"trend =",t))
+      }
+      
+      assign("out_ar2",rbind(out_ar2, test.series(ar.order = 2,
+                                                  series.length = n,
+                                                  trend.strength = t,
+                                                  rho = NA,
+                                                  var = iv_mean_ar2,
+                                                  nsims = nsims))) 
+    }
+  }
 }
+
   
+}
+
+
 
 ```
 
@@ -885,6 +786,9 @@ for (m in seq(50,650,50)){
 Throughout this study we adopt an alpha value of 0.05 to assess significance of statistical results. Overall, no method performed consistently well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere (Yue and Wang 2002; Yue et al. 2002), we find time series length has a large effect on the power of each test (Figure \ref{Fig2}), and performance was generally best across autocorrelation and trend scenarios when N = 30. With no autocorrelation and trend present, trends were only detected with > 90% accuracy when trend was strong ($\alpha_{1} = 0.147$). Even with a strong trend and no autocorrelation, no test detected a trend in greater than 50% of the series when N = 10. Again under no autocorrelation, the increased power associated with increasing series length diminished with reductions in trend strength across all tests. The GLS test showed the highest rejection rates compared to other tests under no autocorrelation, although this effect was minimal (percent increase of rejection rates between GLS and MK-TFPW  was ~`r round(perc_change1,0)`%). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 (MK-TFPW~sig~ = `r round(nom_p[nom_p$test == "pw",]$prop,3)`, MK~sig~ = `r round(nom_p[nom_p$test == "mk",]$prop,3)`, GLS~sig~ = `r round(nom_p[nom_p$test == "gls",]$prop,3)`).
   
 ```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
+
+
+p_agg <- out_ar1 %>% group_by(test, series.length, trend)
 
 levels(p_agg$test) <- c("GLS","Mann-Kendall","MK-TFPW")
 names(p_agg)[4] <- "Method"
