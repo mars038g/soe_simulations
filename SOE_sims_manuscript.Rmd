@@ -51,6 +51,9 @@ load(file.path(data.dir, "sim_param.Rdata"))
 #2017 SOE report data
 load(file.path(data.dir,'SOE_data_2017.RData'))
 
+#List of fields from 2017 SOE report
+load(file.path(data.dir,"SOE_fields.Rdata"))
+
 #Label facets
 label <- function(variable,value){
   return(facet_names[value])
@@ -131,70 +134,7 @@ Parameters used in simulations were chosen based on preliminary analyses charact
 
 ```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}", warning=FALSE}
 
-
-fields <- c('GOM Benthos Landings','GOM Mesoplanktivore Landings',
-            'GOM Macroplanktivore Landings','GOM Macrozoo-piscivore Landings',
-            'GOM Benthivore Landings','GOM Piscivore Landings',
-            'GOM Benthos Revenue','GOM Mesoplanktivore Revenue',
-            'GOM Macroplanktivore Revenue','GOM Macrozoo-piscivore Revenue',
-            'GOM Benthivore Revenue','GOM Piscivore Revenue','GOM Benthos Fall',
-            'GOM Mesoplanktivore Fall','GOM Macroplanktivore Fall',
-            'GOM Macrozoo-piscivore Fall','GOM Benthivore Fall',
-            'GOM Piscivore Fall','GOM Benthos Spring',
-            'GOM Mesoplanktivore Spring','GOM Macroplanktivore Spring',
-            'GOM Macrozoo-piscivore Spring','GOM Benthivore Spring',
-            'GOM Piscivore Spring','FALL GOM ESn',
-            'SPRING GOM ESn','Right whale population',
-            'GOM PPD','GOM Yearly Calanus Anomaly',
-            'GOM Yearly Zooplankton Biovolume','GOM Yearly small copeopods anomaly',
-            'MAB Benthos Landings','MAB Mesoplanktivore Landings',
-            'MAB Macroplanktivore Landings', 'MAB Macrozoo-piscivore Landings',
-            'MAB Benthivore Landings','MAB Piscivore Landings',
-            'MAB Benthos Revenue','MAB Mesoplanktivore Revenue',
-            'MAB Macroplanktivore Revenue', 'MAB Macrozoo-piscivore Revenue',
-            'MAB Benthivore Revenue','MAB Piscivore Revenue','MAB Benthos Fall',
-            'MAB Mesoplanktivore Fall','MAB Macroplanktivore Fall',
-            'MAB Macrozoo-piscivore Fall','MAB Benthivore Fall',
-            'MAB Piscivore Fall','MAB Benthos Spring',
-            'MAB Mesoplanktivore Spring','MAB Macroplanktivore Spring',
-            'MAB Macrozoo-piscivore Spring','MAB Benthivore Spring',
-            'MAB Piscivore Spring','FALL MAB ESn',
-            'SPRING MAB ESn','Right whale population',
-            'MAB PPD','MAB Yearly Calanus Anomaly',
-            'MAB Yearly Zooplankton Biovolume','MAB Yearly small copeopods anomaly',
-            'Sea Surface Temperature','Gulf Stream Index',
-            'Surface temp GB','Bottom temp GB','Stratification (0-50m) GB core',
-            'Surface Salinity GB','Bottom salinity GB',
-            'Surface temp GOM','Bottom temp GOM',
-            'Stratification (0-50m) GOM core',
-            'Bottom salinity GOM','Gulf Stream Index',
-            'New England fleet count','New England average fleet diversity',
-            'New England commercial species diversity','North Atlantic Rec participation',
-            'North Atlantic angler trips','Mid-Atlantic fleet count',
-            'Mid-Atlantic average fleet diversity','Mid-Atlantic commercial species diversity',
-            'Mid-Atlantic Rec participation','Mid-Atlantic angler trips',
-            'aquaculture VA hard clams sold','aquaculture VA oysters sold',
-            'aquaculture VA hard clams planted','aquaculture VA oysters planted',
-            'aquaculture ME Atlantic salmon harvest weight','aquaculture ME trout harvest weight',
-            'aquaculture ME blue mussels harvest weight','aquaculture ME oysters harvest weight',
-            'aquaculture RI total value value','aquaculture RI oysters sold',
-            'GB Benthos Landings','GB Mesoplanktivore Landings',
-            'GB Macroplanktivore Landings','GB Macrozoo-piscivore Landings',
-            'GB Benthivore Landings','GB Piscivore Landings',
-            'GB Benthos Revenue','GB Mesoplanktivore Revenue',
-            'GB Macroplanktivore Revenue','GB Macrozoo-piscivore Revenue',
-            'GB Benthivore Revenue','GB Piscivore Revenue',
-            'GB Piscivore Fall', 'GB Benthivore Fall',
-            'GB Macrozoo-piscivore Fall','GB Macroplanktivore Fall',
-            'GB Mesoplanktivore Fall','GB Benthos Fall',
-            'GB Piscivore Spring', 'GB Benthivore Spring',
-            'GB Macrozoo-piscivore Spring','GB Macroplanktivore Spring',
-            'GB Mesoplanktivore Spring','GB Benthos Spring',
-            'FALL GB ESn','SPRING GB ESn','GBK PPD',
-            'GBK Yearly Calanus Anomaly','GBK Yearly Zooplankton Biovolume',
-            'GBK Yearly small copeopods anomaly')
-
-
+#A function to *approximate* starting simulation parameters with linear models------------------------
 nlm <- function(field, lin = NULL, norm = NULL){
   time <- SOE.data[SOE.data$Var == field,]$Time
   end = max(time)
@@ -226,32 +166,7 @@ nlm <- function(field, lin = NULL, norm = NULL){
   return(out)
 }
 
-# lm_resid <- function(field, lin = NULL, norm = NULL){
-#   time <- SOE.data[SOE.data$Var == field,]$Time
-#   end = max(time)
-#   time = time[1:which(time == end)]
-# 
-#   var <- SOE.data[SOE.data$Var == field,]$Value
-#   var <- var[1:length(time)]
-# 
-#   if(norm == TRUE){
-#     var = (var-mean(var))/sd(var)
-#   } else {
-#     var = var
-#   }
-# 
-#   if(lin == TRUE){
-#     time <- c(1:length(time))
-#     mod <- lm(var ~ time)$residuals
-#   } else if (lin == FALSE){
-#     time <- c(1:length(time))
-#     time2 <- time^2
-#     mod <- lm(var ~ time + time2)$residuals
-#   }
-#   return(mod)
-# }
-
-#Estimate AR(p) parameters---------------------------------------------------
+#A function to estimate AR(p) parameters--------------------------------------------------------------
 handle_arima <- function(field, a){
   tryCatch(
     {
@@ -259,9 +174,11 @@ handle_arima <- function(field, a){
         filter(Var == field) %>% 
         mutate(Value = (Value-mean(.$Value))/sd(.$Value)) %>% #normalize
         arrange(Time) %>% #arrange
-        pull(Value)
+        dplyr::select(Time, Value) 
       
-      mod <- arima(x = x.ts, order = c(a,0,0), include.mean = TRUE)
+      res <- lm(Value ~ Time, data = x.ts)$residuals
+      
+      mod <- arima(x = res, order = c(a,0,0))
       
       if (a == 2){
         out <- data.frame(ar1 = mod$coef[1],
@@ -273,80 +190,78 @@ handle_arima <- function(field, a){
                           ar2 = NA,
                           var = mod$sigma2,
                           field = field)
+       
       }
+      
       return(out)
     },
     error=function(error_message) {
       message(error_message)
-      return(NA)
+      return(data.frame(ar1 = NA,
+                          ar2 = NA,
+                          var = NA,
+                          field = field))
     }
   )
 }
 
-#estimate AR1
-ar1.out <- do.call(rbind,
-                   mapply(handle_arima, fields, a = 1))
+#Estimate AR(1)
+ar1.out <- NULL
+for (i in fields){
+  assign("ar1.out",rbind(handle_arima(i, a = 1), ar1.out))
+}
 
-#estimate AR2
-ar2.out <- do.call(rbind,
-                   mapply(handle_arima, fields, a = 2))
+#Estimate AR(2)
+ar2.out <- NULL
+for (i in fields){
+  assign("ar2.out",rbind(handle_arima(i, a = 2), ar2.out))
+}
 
-#residuals
-lin_resid <- mapply(lm_resid,fields, lin = TRUE, norm = TRUE)
-
-#linear coefficients
+#Estimate linear coefficients
 beta_lin <- mapply(nlm, fields, lin = TRUE, norm = TRUE)
 lin_coefficients <- data.frame("Fields"  = fields,
                                "Intercept" = beta_lin[1,],
                                "beta1" = beta_lin[2,])
 
-#AR1
-# AR_coef <- NULL
-# arima_intercept <- NULL
-# sigma2 <- NULL
-# for (i in 1:length(lin_resid)){
-#   z <- arima(lin_resid[[i]], c(1,0,0))
-#   AR_coef[i] <- z$coef[1]
-#   arima_intercept[i] <- z$coef[2]
-#   sigma2[i] <- z$sigma2
-# }
-# arima_lin_df <- data.frame("Fields" = fields,
-#                            "AR1 Coef"=AR_coef,
-#                            "Intercept" = arima_intercept,
-#                            "Variance" = sigma2)
-
-
-
-
-
-#summaries-----------------------------------------------------------------
+#Data summaries---------------------------------------------------------------------------------------
 
 #regression slopes
 abs_beta <- abs(beta_lin[2,]) 
 mean_beta1_linear <- mean(abs_beta)
-lower_95_beta1 <- quantile(x = abs_beta, probs = 0.05)
 upper_95_beta1 <- quantile(x = abs_beta, probs = 0.95)
 
 #AR(1)
 mean_ar1 <- mean(ar1.out$ar1, na.rm = T)
 upper_95_ar1 <- quantile(x = ar1.out$ar1, probs = 0.95, na.rm = TRUE)
+
+#Variance
 iv_mean_ar1 <- mean(ar1.out$var, na.rm = T)
-upper_95_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.95, na.rm = TRUE)
+upper_75_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.75, na.rm = TRUE)
+lower_25_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.25, na.rm = TRUE)
 
 #AR(2)
 mean_ar2_coef1 <- mean(ar2.out$ar1, na.rm = T)
 mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
 iv_mean_ar2 <- mean(ar2.out$var, na.rm = T)
-upper_95_iv_ar2 <- quantile(x = ar2.out$var, probs = 0.95, na.rm = TRUE)
 
 trend.df <- data.frame(Var = c("none","weak","med","strong"),
                        Value = c(0,0.026, 0.051, 0.147))
 
-if (run = T){
- save(mean_beta1_linear,lower_95_beta1,upper_95_beta1,
-     mean_ar1,upper_95_ar1,iv_mean_ar1,upper_95_iv_ar1,
-     mean_ar2_coef1,mean_ar2_coef2,iv_mean_ar2,upper_95_iv_ar2,trend.df,file = "sim_param.rdata")
+#Save clean data--------------------------------------------------------------------------------------
+
+if (save_clean){
+  
+ save(mean_beta1_linear, upper_95_beta1,
+     mean_ar1, upper_95_ar1,
+     iv_mean_ar1, upper_75_iv_ar1,
+     lower_25_iv_ar1,
+     mean_ar2_coef1, mean_ar2_coef2,
+     iv_mean_ar2, trend.df,
+     file = file.path(data.dir,"sim_param.rdata"))
+
 }
+
+#Build plots------------------------------------------------------------------------------------------
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
   geom_histogram(bins = 124, binwidth = 0.005,
@@ -363,43 +278,23 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)) +
-  annotate("text", x = 0, y = 15, label = "A")
+        strip.text = element_text(size = 10))
 
-# ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
-#   geom_histogram(bins = 124, binwidth = 0.05,
-#                  fill = "lightblue", color = "black",
-#                  position = "dodge") +
-#   scale_y_continuous(expand = c(0,0),
-#                      limits = c(0,13)) +
-#   xlab(expression(rho)) +
-#   ylab("") +
-#   geom_vline(aes(xintercept = mean_ar1), col = "indianred", size = 1) +
-#   theme_bw() +
-#   theme(plot.title = element_blank(),
-#         strip.background = element_blank(),
-#         axis.text = element_text(size = 9),
-#         axis.title = element_text(size = 10),
-#         strip.text = element_text(size = 10))  +
-#   annotate("text", x = min(ar1.out$ar1, na.rm = TRUE)*1.05, y = 12, label = "B")
-# 
-# ar2 <- ggplot(data = ar2.out, aes(x = ar2)) +
-#   geom_histogram(bins = 124, binwidth = 0.05,
-#                  fill = "lightblue", color = "black",
-#                  position = "dodge") +
-#   scale_y_continuous(expand = c(0,0),
-#                      limits = c(0,16)) +
-#   xlab(expression(rho)) +
-#   ylab("") +
-#   geom_vline(aes(xintercept = mean_ar2_coef2), col = "indianred", size = 1) +
-#   theme_bw() +
-#   theme(plot.title = element_blank(),
-#         strip.background = element_blank(),
-#         axis.text = element_text(size = 9),
-#         axis.title = element_text(size = 10),
-#         strip.text = element_text(size = 10))  +
-#   annotate("text", x = min(ar2.out$ar2, na.rm = TRUE)*1.05, y = 15, label = "C")
-
+ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
+  geom_histogram(bins = 124, binwidth = 0.05,
+                 fill = "lightblue", color = "black",
+                 position = "dodge") +
+  scale_y_continuous(expand = c(0,0),
+                     limits = c(0,13)) +
+  xlab(expression(rho)) +
+  ylab("") +
+  geom_vline(aes(xintercept = mean_ar1), col = "indianred", size = 1) +
+  theme_bw() +
+  theme(plot.title = element_blank(),
+        strip.background = element_blank(),
+        axis.text = element_text(size = 9),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10))  
 
 iv <- ggplot(data = ar1.out, aes(x = var)) +
   geom_histogram(bins = 124, binwidth = 0.05,
@@ -407,7 +302,7 @@ iv <- ggplot(data = ar1.out, aes(x = var)) +
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,16.5)) +
-  xlab("Variance") +
+  xlab("Series Variance") +
   ylab("") +
   geom_vline(aes(xintercept = iv_mean_ar1), col = "indianred", size = 1) +
   geom_vline(aes(xintercept = upper_95_iv_ar1), col = "indianred", size = 1, linetype = "dashed") +
@@ -416,14 +311,12 @@ iv <- ggplot(data = ar1.out, aes(x = var)) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)) +
-  annotate("text", x = 0, y = 15, label = "B")
+        strip.text = element_text(size = 10))
 
-grid.arrange(arrangeGrob(beta, 
-                        #ar,
-                         iv, 
-                         nrow = 1,
-                         left = textGrob("Frequency", rot = 90, vjust = 1)), nrow=1)
+cowplot::plot_grid(beta, ar1, iv, nrow = 1,
+                   labels = c("A","B","C"),
+                   label_fontface = "plain",
+                   label_x = c(0.125,0.15,0.125))
 
 ```
 
@@ -597,6 +490,7 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
 }
 
 #AR1 with 0.95 quantile of variance sample distribution
+#75 and 25; include that we repeated for different levels of variance and similar patterns existed etc.
 var2_ar1 <- NULL
 noAR <- 0
 for (r in c("noAR","mean_ar1","upper_95_ar1")){
@@ -619,6 +513,7 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
 }
 
 #AR2
+#Rewrite fit_lm to include AR1, AR2 and normally distributed
 out_ar2 <- NULL
 for (n in c(10,20,30)){
    for (t in c("none","weak","med","strong")){
@@ -641,7 +536,7 @@ for (n in c(10,20,30)){
 null_case <- NULL
 for (r in c("upper_95_ar1")){
   for (n in seq(50,650,50)){
-    for (t in c("none","weak","med","strong")){
+    for (t in c("none")){
       for (i in 1:nsims){      
         if (i %in% seq(1,nsims,nsims/20)){
           print(paste("sim =",i,"series length =",n,"trend =",t,"ar =",r))
@@ -657,16 +552,13 @@ for (r in c("upper_95_ar1")){
     }
   }
 }
-#
-
-  if (save_clean){
-    save(null_case, out_ar1, out_ar2, var2_ar1, file = file.path(data.dir,"simulation_results.Rdata"))
-  }
+if (save_clean){
+  save(null_case, out_ar1, out_ar2, var2_ar1, file = file.path(data.dir,"simulation_results.Rdata"))
+}
 
 } else {
   load(file.path(data.dir, "simulation_results.Rdata"))
 }
-
 
 
 ```
@@ -676,11 +568,20 @@ for (r in c("upper_95_ar1")){
 set_levels <- function(df){
   df$trend <- df %>%
                 pull(trend) %>%
-                factor(., levels=c('Strong trend','Medium trend','Weak trend','No trend'))
+                plyr::mapvalues(.,from = c("none","weak","med","strong"),
+                                to = c("No trend", "Weak trend","Med. trend", "Strong trend")) %>% 
+                factor(., levels=c('Strong trend','Med. trend','Weak trend','No trend'))
   
-  df$series.length <- df %>% 
-    pull(series.length) %>% 
-    factor(.,levels = c(10,20,30))
+  if (max(as.numeric(df$series.length))==30){
+    df$series.length <- df %>% 
+        pull(series.length) %>% 
+        factor(.,levels = c(10,20,30))
+  } else {
+    df$series.length <- df %>% 
+        pull(series.length) %>% 
+        factor(.,levels = seq(50,650,50))
+  }
+  
   
   df$test <- df %>% 
     pull(test) %>% 
@@ -708,10 +609,10 @@ set_levels <- function(df){
 
 }
 
-out_ar1 <- set_levels(out_ar1)
-var2_ar1 <- set_levels(var2_ar1)
-out_ar2 <- set_levels(out_ar2)
-null_case <- set_levels(null_case)
+out_ar1_int <- set_levels(out_ar1)
+var2_ar1_int <- set_levels(var2_ar1)
+out_ar2_int <- set_levels(out_ar2)
+null_case_int <- set_levels(null_case)
 
 
 #Aggregate p values
@@ -721,10 +622,10 @@ p_agg <- function(df){
     dplyr::summarise(prop = length(p[p < 0.05])/n())
 }
 
-agg_out_ar1 <- p_agg(out_ar1)
-agg_var2_ar1 <- p_agg(var2_ar1)
-agg_out_ar2 <- p_agg(out_ar2) #Only one level of rho in AR(2); extra grouping doesn't matter
-agg_null_case <- p_agg(null_case)
+agg_out_ar1 <- p_agg(out_ar1_int)
+agg_var2_ar1 <- p_agg(var2_ar1_int)
+agg_out_ar2 <- p_agg(out_ar2_int) #Only one level of rho in AR(2); extra grouping doesn't matter
+agg_null_case <- p_agg(null_case_int)
 
 
 #some values for text
@@ -786,13 +687,13 @@ Extending this no trend and strong autocorrelation scenario out to longer series
 
 ```{r power subset figure, fig.align="center", fig.asp=0.45, eval = T, echo = F, fig.show = "h", fig.cap= "Barplot showing the ratio of number of rejections (\\textit{P}<0.05) to number of total simulations, when simulations were created under the parameters of no trend $(\\alpha_{1} = 0)$, strong autocorrelation $(\\rho = 0.8)$, and series lengths between \\textit{N} = 50 to $N = 500$. The dashed red line shows the nominal rejection rate of 0.05.\\label{Fig3}"}
 
-pow <- sim_results_ext %>% group_by(series.length, test) %>% dplyr::summarise(rej_prop = length(p[p<0.05])/n())
 
-pow$series.length <- as.factor(pow$series.length)
-levels(pow$test) <- c("GLS","Mann-Kendall","MK-TFPW")
-names(pow)[2] <- "Method"
-
-ggplot(pow, aes(x = series.length, y = rej_prop, group = Method,fill = Method)) +
+agg_null_case %>% 
+  filter(trend == "No trend") %>% 
+ggplot(aes(x = series.length,
+           y = prop,
+           group = Method,
+           fill = Method)) +
   geom_bar(stat = "identity",position="dodge", color = "black") +
   geom_hline(yintercept=0.05, linetype="dashed", 
              color = "red", size=1) +
