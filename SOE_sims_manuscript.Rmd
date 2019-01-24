@@ -676,14 +676,34 @@ for (r in c("upper_95_ar1")){
 set_levels <- function(df){
   df$trend <- df %>%
                 pull(trend) %>%
-                plyr::mapvalues(., from = c("none","weak","med","strong"),
-                  to = c("No trend","Weak trend","Medium trend","Strong trend")) %>%
                 factor(., levels=c('Strong trend','Medium trend','Weak trend','No trend'))
   
   df$series.length <- df %>% 
     pull(series.length) %>% 
     factor(.,levels = c(10,20,30))
-
+  
+  df$test <- df %>% 
+    pull(test) %>% 
+    plyr::mapvalues(., from = c("gls","mk","pw"), 
+                    to = c("GLS","Mann-Kendall","MK-TFPW")) %>% 
+    factor(.,levels = c("GLS","Mann-Kendall","MK-TFPW"))
+  
+  if (is.na(df$rho2[1])){
+    df <- df %>%
+      mutate(rho1 = round(rho1, 3)) %>% 
+      mutate(rho1 = plyr::mapvalues(rho1,from = c(0,0.568,0.953),
+                                 to = c("No AR","Med. AR","Strong AR")),
+                           rho1)
+    if (length(unique(df$rho1)) == 3){
+      df$rho1 <- df %>% 
+        pull(rho1) %>% 
+        factor(., levels = c("No AR","Med. AR", "Strong AR"))
+    }
+    
+  }
+  
+  df <- df %>% dplyr::rename(Method = test)
+  
   return(df)
 
 }
@@ -697,7 +717,7 @@ null_case <- set_levels(null_case)
 #Aggregate p values
 p_agg <- function(df){
   df %>% 
-    group_by(test, series.length, rho1, trend) %>% 
+    group_by(Method, series.length, rho1, trend) %>% 
     dplyr::summarise(prop = length(p[p < 0.05])/n())
 }
 
@@ -708,29 +728,30 @@ agg_null_case <- p_agg(null_case)
 
 
 #some values for text
-gls <- agg_out_ar1 %>% dplyr::filter(rho1 == 0, test == "gls")
-pw <- agg_out_ar1 %>% filter(rho1 == 0, test == "pw")
+gls <- agg_out_ar1 %>% dplyr::filter(rho1 == "No AR", Method == "GLS")
+pw <- agg_out_ar1 %>% filter(rho1 == "No AR", Method == "MK-TFPW")
 
 perc_change1 <- abs(mean(pw$prop) - mean(gls$prop))/mean(gls$prop) * 100
-nom_p <- agg_out_ar1 %>% filter(trend == "No trend", rho1 == 0, series.length == 10)
-strAR_noTR <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == max(rho1), series.length == 30)
+nom_p <- agg_out_ar1 %>% filter(trend == "No trend", rho1 == "No AR", series.length == 10)
+strAR_noTR <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == "Strong AR", series.length == 30)
 
-perc_change_mk <- round(abs(strAR_noTR[strAR_noTR$test == "mk",]$prop - strAR_noTR[strAR_noTR$test == "gls",]$prop)/
-                        (strAR_noTR[strAR_noTR$test == "mk",]$prop) * 100,0)
-perc_change_pw <- round(abs(strAR_noTR[strAR_noTR$test == "pw",]$prop - strAR_noTR[strAR_noTR$test == "gls",]$prop)/
-                        (strAR_noTR[strAR_noTR$test == "pw",]$prop) * 100,0)
+perc_change_mk <- round(abs(strAR_noTR[strAR_noTR$Method == "Mann-Kendall",]$prop - strAR_noTR[strAR_noTR$Method == "GLS",]$prop)/
+                        (strAR_noTR[strAR_noTR$Method == "Mann-Kendall",]$prop) * 100,0)
+
+perc_change_pw <- round(abs(strAR_noTR[strAR_noTR$Method == "MK-TFPW",]$prop - strAR_noTR[strAR_noTR$Method == "GLS",]$prop)/
+                        (strAR_noTR[strAR_noTR$Method == "MK-TFPW",]$prop) * 100,0)
 
 #sample size effect
-ss1 <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == max(rho1), series.length == 10)
-ss2 <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == max(rho1),  series.length == 30)
+ss1 <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == "Strong AR", series.length == 10)
+ss2 <- agg_out_ar1 %>% filter(trend  == "No trend", rho1 == "Strong AR",  series.length == 30)
 
-pw1 <- ss1[ss1$test == "pw",]$prop
-pw2 <- ss2[ss2$test == "pw",]$prop
+pw1 <- ss1[ss1$Method == "MK-TFPW",]$prop
+pw2 <- ss2[ss2$Method == "MK-TFPW",]$prop
 
 pw_ss <- round((pw1 - pw2)/pw1, 2)*100
 
-gls1 <- ss1[ss1$test == "gls",]$prop
-gls2 <- ss2[ss2$test == "gls",]$prop
+gls1 <- ss1[ss1$Method == "gls",]$prop
+gls2 <- ss2[ss2$Method == "gls",]$prop
 
 gls_ss <- round((gls1 - gls2)/gls1, 2)*100
 
@@ -740,16 +761,11 @@ Throughout this study we adopt an alpha value of 0.05 to assess significance of 
   
 ```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
 
-
-p_agg <- out_ar1 %>% group_by(test, series.length, trend)
-
-levels(p_agg$test) <- c("GLS","Mann-Kendall","MK-TFPW")
-names(p_agg)[4] <- "Method"
-ggplot(p_agg, aes(color = Method, y = prop, 
+ggplot(agg_out_ar1,aes(color = Method, y = prop, 
                   x = series.length)) +
   geom_bar(aes(fill = Method), stat = "identity",  position="dodge",
             size = 0.5, color = "black") +
-  facet_grid(trend ~ ar, labeller = labeller(tbl)) +
+  facet_grid(trend ~ rho1, labeller = labeller(tbl)) +
   ylab("Proportion significant") +
   xlab("Series length") +
   scale_fill_brewer(palette = "PuBu", direction = -1) +
