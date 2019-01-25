@@ -51,8 +51,8 @@ test.series <- function(ar.order,
                     time = 1:length(dat))
   
   #fit gls model
-  gls_sim <- fit_lm(dat = dat,
-                    p = ar.order)
+  gls_sim <- fit_lm(dat = dat)
+  gls_chosen <- gls_sim$best_lm$model
     
   if (is.na(gls_sim[1])){
     gls_mae <- NA
@@ -68,11 +68,11 @@ test.series <- function(ar.order,
     gls_pred <- AICcmodavg::predictSE(gls_sim$model,
                                       newdata = newdata,
                                       se.fit = F)
-    if(!is.na(gls_sim$best_lm$coefs.time2)){
-      slope_pred <- NA
-    } else {
-      slope_pred <- gls_pred[2] - gls_pred[1]
-    }
+    # if(!is.na(gls_sim$best_lm$coefs.time2)){ 
+    #   slope_pred <- NA
+    # } else {
+    slope_pred <- gls_pred[2] - gls_pred[1]
+    # }
     
     ##Get error and pvalue
     gls_rmse <- sqrt(mean((gls_pred - true_trend)^2))
@@ -84,6 +84,7 @@ test.series <- function(ar.order,
     gls_df <- data.frame(test = "gls",
                          series.length = series.length,
                          n = nsims,
+                         gls_chosen = gls_chosen,
                          rho1 = ar.strength[1],
                          rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                          trend = trend.strength,
@@ -103,6 +104,7 @@ test.series <- function(ar.order,
     mk_df <- data.frame(test = "mk",
                         series.length = series.length,
                         n = nsims,
+                        gls_chosen = NA,
                         rho1 = ar.strength[1],
                         rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                         trend = trend.strength,
@@ -127,6 +129,7 @@ test.series <- function(ar.order,
     pw_df <- data.frame(test = "pw",
                         series.length = series.length,
                         n = nsims,
+                        gls_chosen = NA,
                         rho1 = ar.strength[1],
                         rho2 = ifelse(ar.order == 2, ar.strength[2], NA),
                         trend = trend.strength,
