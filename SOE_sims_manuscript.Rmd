@@ -496,7 +496,8 @@ noAR <- 0
 for (r in c("noAR","mean_ar1","upper_95_ar1")){
   for (n in c(10,20,30)){
     for (t in c("none","weak","med","strong")){
-      for (i in 1:nsims){      
+      for (v in c("upper_75_iv_ar1","lower_25_iv_ar1")){
+        for (i in 1:nsims){      
         if (i %in% seq(1,nsims,nsims/20)){
           print(paste("sim =",i,"series length =",n,"trend =",t,"ar =",r))
         }
@@ -505,8 +506,9 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
                                                     rho = r,
                                                     series.length = n,
                                                     trend.strength = t,
-                                                    var = upper_95_iv_ar1,
+                                                    var = get(v),
                                                     nsims = nsims))) 
+        }
       }
     }
   }
@@ -535,7 +537,7 @@ for (n in c(10,20,30)){
 #strong AR and no trend 
 null_case <- NULL
 for (r in c("upper_95_ar1")){
-  for (n in seq(50,650,50)){
+  for (n in seq(250,650,50)){
     for (t in c("none")){
       for (i in 1:nsims){      
         if (i %in% seq(1,nsims,nsims/20)){
@@ -552,6 +554,7 @@ for (r in c("upper_95_ar1")){
     }
   }
 }
+
 if (save_clean){
   save(null_case, out_ar1, out_ar2, var2_ar1, file = file.path(data.dir,"simulation_results.Rdata"))
 }
@@ -592,7 +595,7 @@ set_levels <- function(df){
   if (is.na(df$rho2[1])){
     df <- df %>%
       mutate(rho1 = round(rho1, 3)) %>% 
-      mutate(rho1 = plyr::mapvalues(rho1,from = c(0,0.568,0.953),
+      mutate(rho1 = plyr::mapvalues(rho1,from = c(0,0.455,0.9),
                                  to = c("No AR","Med. AR","Strong AR")),
                            rho1)
     if (length(unique(df$rho1)) == 3){

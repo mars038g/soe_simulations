@@ -15,7 +15,7 @@ test.series <- function(ar.order,
   
   #Get true trend
   b <- trend.df %>% filter(Var == trend.strength) %>% pull(Value)
-  true_trend <- -0.262 + (b* c(1:series.length))
+  true_trend <- (b* c(1:series.length))
 
   #AR parameters
   order <- c(ar.order,0,0)
@@ -51,7 +51,7 @@ test.series <- function(ar.order,
                     time = 1:length(dat))
   
   #fit gls model
-  gls_sim <- fit_lm(dat = dat)
+  gls_sim <- fit_lm(dat = dat, ar.order = ar.order)
   gls_chosen <- gls_sim$best_lm$model
     
   if (is.na(gls_sim[1])){
