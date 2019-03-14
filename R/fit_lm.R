@@ -7,7 +7,7 @@ fit_lm <- function(dat, ar.order){
   #Null model with normal error structure
   constant_norm <-nlme::gls(series ~ 1, data = dat)
   
-  if (ar.order == 1){
+  
   
     #Null model with AR(1) error structure - cascades through optimizers
     constant_ar1 <- try(nlme::gls(series ~ 1,
@@ -23,7 +23,7 @@ fit_lm <- function(dat, ar.order){
       if (class(constant_ar1) == "try-error") message("NULL AR1 model has failed")
     }
     
-  } else {
+    if (ar.order == 2){
   
     #Null model with AR(2) error structure
     constant_ar2 <- try(nlme::gls(series ~ 1,
@@ -47,7 +47,11 @@ fit_lm <- function(dat, ar.order){
                                                            optimMethod = "SANN"),
                                       correlation = corARMA(form = ~time, p = 2, q = 0)))
         
-        if (class(constant_ar2) == "try-error") message("NUll AR2 model has failed")
+        if (class(constant_ar2) == "try-error"){
+          
+          
+          return(message("NUll AR2 model has failed!!!!!"))
+        }
         
         }
       }
@@ -57,7 +61,7 @@ fit_lm <- function(dat, ar.order){
   # Linear model with normal error
   linear_norm <- nlme::gls(series ~ time, data = dat)
   
-  if (ar.order == 1){
+  
   
     # Linear model with AR1 error
     linear_ar1 <- try(nlme::gls(series ~ time,
@@ -76,7 +80,8 @@ fit_lm <- function(dat, ar.order){
     linear1_phi <- linear_ar1$modelStruct$corStruct
     linear1_phi <- coef(linear1_phi, unconstrained = FALSE)
   
-  } else {
+    if (ar.order == 2){
+      
     #Linear model with AR2 error
     linear_ar2 <- try(nlme::gls(series ~ time,
                                 data = dat,
@@ -100,7 +105,11 @@ fit_lm <- function(dat, ar.order){
                                                          optimMethod = "SANN"),
                                     correlation = corARMA(form = ~time, p = 2, q = 0)))
         
-        if (class(linear_ar2) == "try-error") message("Linear AR2 model has failed")
+        if (class(linear_ar2) == "try-error"){
+          
+          
+          return(message("Linear AR2 model has failed!!!!!"))
+        }
         
       }
     }
@@ -134,19 +143,27 @@ fit_lm <- function(dat, ar.order){
   } else {
     df_aicc <-
       data.frame(model = c("linear_norm",
+                           "linear_ar1",
                            "linear_ar2"),
                  aicc  = c(AICc(linear_norm),
+                           AICc(linear_ar1),
                            AICc(linear_ar2)),
                  coefs = rbind(coef(linear_norm),
+                               coef(linear_ar1),
                                coef(linear_ar2)),
                  phi1 = c(NA,
+                          linear1_phi,
                           linear2_phi[1]),
                  phi2 = c(NA,
+                          NA,
                           linear2_phi[2]),
                  # Calculate overall signifiance (need to use
                  # ML not REML for this)
                  pval = c(anova(update(constant_norm, method = "ML"),
                                 update(linear_norm, method = "ML"))$`p-value`[2],
+                          
+                          anova(update(constant_ar1, method = "ML"),
+                                update(linear_ar1, method = "ML"))$`p-value`[2],
                           
                           anova(update(constant_ar2, method = "ML"),
                                 update(linear_ar2, method = "ML"))$`p-value`[2]))

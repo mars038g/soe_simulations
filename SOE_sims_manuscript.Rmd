@@ -10,10 +10,18 @@ geometry: margin=1in
 bibliography: SOE simulations.bib
 csl: ices-journal-of-marine-science.csl
 documentclass: ouparticle
+self_contained: no
 ---
 
 
 ```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE,
+                      message = FALSE,
+                      warning = FALSE,
+                      fig.align = 'center',
+                      fig.path='figures/',
+                      dev = c('png')) 
+
 data.dir <- here::here("data.dir")
 r.dir <- here::here("R")
 
@@ -72,7 +80,7 @@ run <- F
 save_clean <- F
 
 #Numbers of simulations
-nsims <- 5000
+nsims <- 100
 
 # ARsd <- .54^.5 #standard deviation of time series
 # ARsd_up95 <- 0.93^.5 #95% CI for variance
@@ -132,7 +140,7 @@ Results indicate that correctly identifying trends is problematic using less tha
 
 Parameters used in simulations were chosen based on preliminary analyses characterizing the distribution of trend and autocorrelation strengths across 124 time series that were candidates for inclusion in the 2017 State of the Ecosystem (SOE) reports [@NEFSC2018a; @NEFSC2018b] (Fig. 1). Trends in these candidate time series were characterized by linear regression, with the mean and upper 95% confidence interval for slopes chosen for representation in simulations. The $\rho$ components of SOE time series were estimated by maximum likelihood estimation (MLE), and the distribution mean was chosen as our "medium autocorrelation" parameter for simulated series. To reasonably parameterize simulation innovation variance, we fit all residual series with an AR(1) model estimating innovation variance using MLE, and then found the mean of the resulting distribution of variances.
 
-```{r preliminary analyses, echo = F, fig.align="center", fig.asp=0.3, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}", warning=FALSE}
+```{r preliminary analyses, echo = F, fig.align="center", fig.width = 8, fig.asp = 0.35, fig.cap="Frequency of estimated slopes (A), autocorrelation strengths (B), and time series variances (C) in data considered for inclusion in the 2017 State of the Ecosystem report. The solid red lines (A-C) represent distribution means, and dashed red lines (A, C) show the upper 95\\% confidence intervals for estimated trend slope and variance. \\label{Fig1}", warning=FALSE}
 
 #A function to *approximate* starting simulation parameters with linear models------------------------
 nlm <- function(field, lin = NULL, norm = NULL){
@@ -236,12 +244,14 @@ upper_95_ar1 <- quantile(x = ar1.out$ar1, probs = 0.95, na.rm = TRUE)
 
 #Variance
 iv_mean_ar1 <- mean(ar1.out$var, na.rm = T)
+upper_95_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.95, na.rm = TRUE)
 upper_75_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.75, na.rm = TRUE)
 lower_25_iv_ar1 <- quantile(x = ar1.out$var, probs = 0.25, na.rm = TRUE)
 
 #AR(2)
 mean_ar2_coef1 <- mean(ar2.out$ar1, na.rm = T)
-mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
+# mean_ar2_coef2 <- mean(ar2.out$ar2, na.rm = T)
+mean_ar2_coef2 <- 0.2
 iv_mean_ar2 <- mean(ar2.out$var, na.rm = T)
 
 trend.df <- data.frame(Var = c("none","weak","med","strong"),
@@ -264,13 +274,13 @@ if (save_clean){
 #Build plots------------------------------------------------------------------------------------------
 
 beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
-  geom_histogram(bins = 124, binwidth = 0.005,
-                 fill = "lightblue", color = "black",
-                 position = "dodge") +
+    geom_histogram(bins = 40, 
+                 fill = "lightblue", color = "deepskyblue4",
+                 position = "dodge",size = 0.01, alpha = 0.75) +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,16.5)) +
-  xlab(expression(alpha[1])) +
-  ylab("") +
+  xlab(expression("|"~alpha[1]~"|")) +
+  ylab("Frequency") +
   geom_vline(aes(xintercept = mean_beta1_linear), col = "indianred", size = 1) +
   geom_vline(aes(xintercept = upper_95_beta1), col = "indianred", size = 1, linetype = "dashed") +
   theme_bw() +
@@ -278,45 +288,47 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
+        strip.text = element_text(size = 10)) +
+  labs(tag = "A")
 
-ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
+ ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
   geom_histogram(bins = 124, binwidth = 0.05,
-                 fill = "lightblue", color = "black",
+                 fill = "lightblue", color = "deepskyblue4",
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,13)) +
   xlab(expression(rho)) +
   ylab("") +
   geom_vline(aes(xintercept = mean_ar1), col = "indianred", size = 1) +
+   geom_vline(aes(xintercept = upper_95_ar1), col = "indianred", size = 1, linetype = "dashed") +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))  
+        strip.text = element_text(size = 10)) +
+  labs(tag = "B")
 
 iv <- ggplot(data = ar1.out, aes(x = var)) +
   geom_histogram(bins = 124, binwidth = 0.05,
-                 fill = "lightblue", color = "black",
+                fill = "lightblue", color = "deepskyblue4",
                  position = "dodge") +
   scale_y_continuous(expand = c(0,0),
                      limits = c(0,16.5)) +
   xlab("Series Variance") +
   ylab("") +
   geom_vline(aes(xintercept = iv_mean_ar1), col = "indianred", size = 1) +
-  geom_vline(aes(xintercept = upper_95_iv_ar1), col = "indianred", size = 1, linetype = "dashed") +
+  geom_vline(aes(xintercept = upper_75_iv_ar1), col = "indianred", size = 1, linetype = "dashed") +
+  geom_vline(aes(xintercept = lower_25_iv_ar1), col = "indianred", size = 1, linetype = "dashed") +
   theme_bw() +
   theme(plot.title = element_blank(),
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
+        strip.text = element_text(size = 10)) +
+  labs(tag = "C")
 
-cowplot::plot_grid(beta, ar1, iv, nrow = 1,
-                   labels = c("A","B","C"),
-                   label_fontface = "plain",
-                   label_x = c(0.125,0.15,0.125))
+cowplot::plot_grid(beta, ar1, iv, nrow = 1)
 
 ```
 
@@ -467,6 +479,7 @@ Y_{t} = Y_{t}^{'} + bt.
 
 ```{r assessing model power, echo = F}
 if (run){
+message("SIM 1 - ORIGINAL")
 #AR1
 out_ar1 <- NULL
 noAR <- 0
@@ -491,6 +504,7 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
 
 #AR1 with 0.95 quantile of variance sample distribution
 #75 and 25; include that we repeated for different levels of variance and similar patterns existed etc.
+message("SIM 2 - multiple var")
 var2_ar1 <- NULL
 noAR <- 0
 for (r in c("noAR","mean_ar1","upper_95_ar1")){
@@ -499,7 +513,7 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
       for (v in c("upper_75_iv_ar1","lower_25_iv_ar1")){
         for (i in 1:nsims){      
         if (i %in% seq(1,nsims,nsims/20)){
-          print(paste("sim =",i,"series length =",n,"trend =",t,"ar =",r))
+          print(paste("sim =",i,"series length =",n,"trend =",t,"ar =",r,"var = ",v))
         }
         
         assign("var2_ar1",rbind(var2_ar1, test.series(ar.order = 1,
@@ -514,26 +528,36 @@ for (r in c("noAR","mean_ar1","upper_95_ar1")){
   }
 }
 
+message("SIM 3 - AR2")
 #AR2
 #Rewrite fit_lm to include AR1, AR2 and normally distributed
 out_ar2 <- NULL
-for (n in c(10,20,30)){
+ for (n in c(10,20,30)){
    for (t in c("none","weak","med","strong")){
-    for (i in 1:nsims){      
-      if (i %in% seq(1,nsims,nsims/20)){
-        print(paste("sim =",i,"series length =",n,"trend =",t))
+        for (i in 1:nsims){      
+          if (i %in% seq(1,nsims,nsims/20)){
+            print(paste("sim =",i,"series length =",n,"trend =",t))
+          }
+          
+          out <- try(test.series(ar.order = 2,
+                                series.length = n,
+                                trend.strength = t,
+                                rho = NA,
+                                var = iv_mean_ar2,
+                                nsims = nsims))
+          if (class(out) == "try-error"){
+            message("BROKEN")
+            next
+            
+          } else {
+            assign("out_ar2",rbind(out_ar2, out)) 
+          }
+          
       }
-      
-      assign("out_ar2",rbind(out_ar2, test.series(ar.order = 2,
-                                                  series.length = n,
-                                                  trend.strength = t,
-                                                  rho = NA,
-                                                  var = iv_mean_ar2,
-                                                  nsims = nsims))) 
     }
   }
-}
 
+message("SIM 4 - NULL CASE")
 #strong AR and no trend 
 null_case <- NULL
 for (r in c("upper_95_ar1")){
@@ -550,14 +574,14 @@ for (r in c("upper_95_ar1")){
                                                     trend.strength = t,
                                                     var = iv_mean_ar1,
                                                     nsims = nsims))) 
+        }
       }
     }
   }
-}
 
-if (save_clean){
-  save(null_case, out_ar1, out_ar2, var2_ar1, file = file.path(data.dir,"simulation_results.Rdata"))
-}
+  if (save_clean){
+    save(null_case, out_ar1, out_ar2, var2_ar1, file = file.path(data.dir,"simulation_results.Rdata"))
+  }
 
 } else {
   load(file.path(data.dir, "simulation_results.Rdata"))
@@ -567,6 +591,7 @@ if (save_clean){
 ```
 
 ```{r simulation results processing, echo = F}
+
 
 set_levels <- function(df){
   df$trend <- df %>%
@@ -604,6 +629,10 @@ set_levels <- function(df){
         factor(., levels = c("No AR","Med. AR", "Strong AR"))
     }
     
+  } else {
+      df$trend <- df %>% 
+        pull(trend) %>% 
+        factor(., levels = c("No trend","Weak trend", "Med. trend","Strong trend"))
   }
   
   df <- df %>% dplyr::rename(Method = test)
@@ -621,7 +650,7 @@ null_case_int <- set_levels(null_case)
 #Aggregate p values
 p_agg <- function(df){
   df %>% 
-    group_by(Method, series.length, rho1, trend) %>% 
+    group_by(var, Method, series.length, rho1, trend) %>% 
     dplyr::summarise(prop = length(p[p < 0.05])/n())
 }
 
@@ -654,14 +683,14 @@ pw2 <- ss2[ss2$Method == "MK-TFPW",]$prop
 
 pw_ss <- round((pw1 - pw2)/pw1, 2)*100
 
-gls1 <- ss1[ss1$Method == "gls",]$prop
-gls2 <- ss2[ss2$Method == "gls",]$prop
+gls1 <- ss1[ss1$Method == "GLS",]$prop
+gls2 <- ss2[ss2$Method == "GLS",]$prop
 
 gls_ss <- round((gls1 - gls2)/gls1, 2)*100
 
 ```
 
-Throughout this study we adopt an alpha value of 0.05 to assess significance of statistical results. Overall, no method performed consistently well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere (Yue and Wang 2002; Yue et al. 2002), we find time series length has a large effect on the power of each test (Figure \ref{Fig2}), and performance was generally best across autocorrelation and trend scenarios when N = 30. With no autocorrelation and trend present, trends were only detected with > 90% accuracy when trend was strong ($\alpha_{1} = 0.147$). Even with a strong trend and no autocorrelation, no test detected a trend in greater than 50% of the series when N = 10. Again under no autocorrelation, the increased power associated with increasing series length diminished with reductions in trend strength across all tests. The GLS test showed the highest rejection rates compared to other tests under no autocorrelation, although this effect was minimal (percent increase of rejection rates between GLS and MK-TFPW  was ~`r round(perc_change1,0)`%). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 (MK-TFPW~sig~ = `r round(nom_p[nom_p$test == "pw",]$prop,3)`, MK~sig~ = `r round(nom_p[nom_p$test == "mk",]$prop,3)`, GLS~sig~ = `r round(nom_p[nom_p$test == "gls",]$prop,3)`).
+Throughout this study we adopt an alpha value of 0.05 to assess significance of statistical results. Overall, no method performed consistently well in all scenarios of simulated trend strength, time series length, and autocorrelation strength. As has been documented elsewhere (Yue and Wang 2002; Yue et al. 2002), we find time series length has a large effect on the power of each test (Figure \ref{Fig2}), and performance was generally best across autocorrelation and trend scenarios when N = 30. With no autocorrelation and trend present, trends were only detected with > 90% accuracy when trend was strong ($\alpha_{1} = 0.147$). Even with a strong trend and no autocorrelation, no test detected a trend in greater than 50% of the series when N = 10. Again under no autocorrelation, the increased power associated with increasing series length diminished with reductions in trend strength across all tests. The GLS test showed the highest rejection rates compared to other tests under no autocorrelation, although this effect was minimal (percent increase of rejection rates between GLS and MK-TFPW  was ~`r round(perc_change1,0)`%). All tests returned rejection rates near the nominal significance level of 0.05 under the no trend and no autocorrelation scenarios, with the largest departures occurring when N = 10 (MK-TFPW~sig~ = `r round(nom_p[nom_p$Method == "MK-TFPW",]$prop,3)`, MK~sig~ = `r round(nom_p[nom_p$Method == "Mann-Kendall",]$prop,3)`, GLS~sig~ = `r round(nom_p[nom_p$Method == "GLS",]$prop,3)`).
   
 ```{r power analysis figure, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
 
@@ -682,9 +711,101 @@ ggplot(agg_out_ar1,aes(color = Method, y = prop,
 
 ```
 
+```{r power analysis var, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
+
+var_df <- agg_var2_ar1 %>% 
+  ungroup() %>% 
+  mutate(var = round(var,1)) %>% 
+  mutate(var = plyr::mapvalues(var, from = c(0.3,0.8),
+                               to = c("Low",
+                                      "High"))) 
+var_df$var <- factor(var_df$var,
+                           levels = c("Low",
+                                      "High"))
+
+
+test <- var_df %>% 
+    mutate(abbr_var = if_else(stringr::str_detect(var, "Low"),
+                              "low","high")) %>% 
+    mutate(var2 = paste(abbr_var, series.length, Method),
+           var3 = paste(series.length, Method),
+           var4 = paste(abbr_var, var),
+           var5 = paste(rho1, series.length)) 
+
+test$var3 <- factor(test$var3,
+                    levels = c("10 GLS",
+                               "10 Mann-Kendall",
+                               "10 MK-TFPW",
+                               "20 GLS",
+                               "20 Mann-Kendall",
+                               "20 MK-TFPW",
+                               "30 GLS",
+                               "30 Mann-Kendall",
+                               "30 MK-TFPW"))
+
+
+test %>% 
+  filter(trend == "Weak trend",
+         series.length == 30) %>%
+  ggplot() +
+  geom_point(aes(x = var3,
+                  y = prop,
+                  color = series.length,
+                 group = var3,
+                  shape = var),size = 2) +
+  geom_line(aes(x = var3,
+                  y = prop,
+                  color = series.length,
+                 group = var3),size = 1) +
+  guides(color = F,
+         shape = guide_legend(title = "Sim. variance"))+
+  facet_grid(trend ~ rho1) +
+  ylab("Proportion significant") +
+  xlab("Test") +
+  scale_x_discrete(labels = rep(c("GLS","MK","MK-TFPW"),3))+
+  scale_color_manual( values = c("#3690C0", "#A6BDDB", "black")) +
+  theme_bw() +
+  theme(plot.title = element_blank(),
+        strip.background = element_blank(),
+        axis.text = element_text(size = 9),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, vjust = 0.6))
+
+test %>% 
+  filter(trend == "Weak trend",
+         series.length == 30) %>%
+  ggplot() +
+  geom_point(aes(x = var3,
+                  y = prop,
+                  color = series.length,
+                 group = var3,
+                  shape = var),size = 2) +
+  geom_line(aes(x = var3,
+                  y = prop,
+                  color = series.length,
+                 group = var3),size = 1) +
+  guides(color = F,
+         shape = guide_legend(title = "Sim. variance"))+
+  facet_grid(trend ~ rho1) +
+  ylab("Proportion significant") +
+  xlab("Test") +
+  scale_x_discrete(labels = rep(c("GLS","MK","MK-TFPW"),3))+
+  scale_color_manual( values = c("#3690C0", "#A6BDDB", "black")) +
+  theme_bw() +
+  theme(plot.title = element_blank(),
+        strip.background = element_blank(),
+        axis.text = element_text(size = 9),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10),
+        axis.text.x = element_text(angle = 45, vjust = 0.6))
+
+```
+
+
   Autocorrelation is known the reduce the power of the MK test by increasing the variance of the \textit{S} statistic [@VonStorch1999a; @Yue2002a], and our work also shows that under no simulated trend, introducing autocorrelation will lead to inflated rejection rates in the MK test. The bottom row of Figure \ref{Fig2} shows that under no trend and medium to strong autocorrelation ($\rho = 0.433$ and $\rho = 0.8$), the rejection rate of the Mann Kendall test increases with series length. All other tests showed decreases in rejection rates.
 
-  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was `r strAR_noTR[strAR_noTR$test == "gls",]$prop`; `r perc_change_pw`% and `r perc_change_mk`% lower than the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the MK-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only `r pw_ss`% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by `r gls_ss`%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.
+  The GLS procedure performed the best under the no trend and strong autocorrelation scenario: when N = 30, the rejection rate for the GLS was `r strAR_noTR[strAR_noTR$Method == "GLS",]$prop`; `r perc_change_pw`% and `r perc_change_mk`% lower than the MK-TFPW and MK tests respectively. The performance of the GLS test was also more strongly affected by sample size than the MK-TFPW test. When there was strong autocorrelation and no trend, rejection rates of the MK-TFPW test decreased only `r abs(pw_ss)`% between N = 10 and N = 30. Under the same conditions and GLS approach, rejection rates decreased by `r gls_ss`%. However, the GLS approach also performed the worst under no trend and strong autocorrelation when N = 10. This shows that while there was improvement between both tests as series lengths increased, neither test was effective in accounting for biases of autocorrelation when $N \leq 30$.
 
 Extending this no trend and strong autocorrelation scenario out to longer series lengths shows that the GLS test reaches nominal rejection rates of 0.05 only when $N \geq 500$ (Figure \ref{Fig3}). The MK-TFPW approach performed poorly in this analysis, and did not converge to nominal rejection rates for $N < 500$, although this work did not seek to identify a precise value of N where the MK-TFPW approach reached nominal levels. As expected, the MK test performed poorly in this scenario, and saw no reduction in rejection rates as N increased. 
 
@@ -711,85 +832,94 @@ ggplot(aes(x = series.length,
         strip.text = element_text(size = 10))
 ```
 
+
+
+```{r ar2 figure, fig.align="center", fig.asp=0.45, eval = T, echo = F, fig.show = "h", fig.cap= ""}
+
+
+ggplot(agg_out_ar2,aes(color = Method, y = prop, 
+                  x = series.length)) +
+  geom_bar(aes(fill = Method), stat = "identity",  position="dodge",
+            size = 0.5, color = "black") +
+  facet_grid(. ~ trend, labeller = labeller(tbl)) +
+  ylab("Proportion significant") +
+  xlab("Series length") +
+  scale_fill_brewer(palette = "PuBu", direction = -1) +
+  theme_bw() +
+  theme(plot.title = element_blank(),
+        strip.background = element_blank(),
+        axis.text = element_text(size = 9),
+        axis.title = element_text(size = 10),
+        strip.text = element_text(size = 10))
+```
+
 Shown in Figure \ref{Fig2} under strong autocorrelation ($\rho = 0.8$) and strong trend ($\alpha_{1} = 0.147$), the relationship between time series length and rejection rate was positive, highlighting the importance of the trend signal strength on test results. Under these parameters, the MK-TFPW test performed slightly better than the GLS approach, although both tests were only able to detect trend in >50% of simulations when trend was strong and N = 20 or N = 30. When $\alpha_{1} < 0.0147$ and autocorrelation was strong, neither the GLS nor MK-TFPW tests were able to detect trend in >50% of simulations regardless of series length. Interestingly, as series lengths increased when trend was weak (i.e. $\alpha_{1} = 0.026$) and $\rho = 0.8$, rejection rates tended to decrease for GLS and MK-TFPW tests. The relative success of each test when N = 30 can be seen in Figure \ref{Fig4}, which shows that the GLS approach was most effective in avoiding false positives, but performed similarly to the MK-TFPW test in terms of false negatives.      
   
 ```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS procedure falsely predicted a trend when there was none in 11.1\\% of cases (white), whereas this was true in 22.1\\% of Mann-Kendall simulations (red).\\label{Fig4}' }
 
-mk <- cbind(conf_mat(sim_results,test = "mk", filt = 30), test = rep('mk',4))
-pw <- cbind(conf_mat(sim_results, test = "pw", filt = 30), test = rep('pw',4))
-gls <- cbind(conf_mat(sim_results, test = "gls", filt = 30), test = rep('gls',4))
-fin <- rbind(mk, pw, gls)
-fin$group <- factor(paste(fin$x,fin$y))
+create_conf <- function(N){
+  mk <- cbind(conf_mat(out_ar1_int,test = "Mann-Kendall", N = N), test = rep('mk',4))
+  pw <- cbind(conf_mat(out_ar1_int, test = "MK-TFPW", N = N), test = rep('pw',4))
+  gls <- cbind(conf_mat(out_ar1_int, test = "GLS", N = N), test = rep('gls',4))
+  fin <- rbind(mk, pw, gls)
+  fin$group <- factor(paste(fin$x,fin$y))
+  
+  
+  #Make matrices for white = good and orange = bad
+  fin_dif <- fin %>% group_by(group) %>%
+    mutate(val, best_dif = ifelse(group == "actual no predicted no"|
+                                    group == "actual yes predicted yes",
+                                  (abs(max(val) - val)), #best_dif is for assigning colors
+                                  (abs(min(val) - val)))) %>% 
+    mutate(test = plyr::mapvalues(test, from = c("mk","pw","gls"),
+                                  to = c("Mann-Kendall","MK-TFPW","GLS")))
+  
+  #plot
+  plt <- ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
+    facet_grid(. ~ test)+
+    geom_tile(aes(size = 1),color = "grey", size = 1)  +
+    scale_fill_gradientn(colors = pal(10))+
+    geom_text(aes(x = x, y = y, label = round(val,3), size = 1),size = 4) +
+    theme(legend.position = "none",
+          axis.line = element_blank(),
+          axis.title=element_blank(),
+          axis.text.y = element_text(margin = margin(t = 0, r = -6,
+                                                     b = 0, l = 0),
+                                     size = 8),
+          axis.text.x = element_text(margin = margin(t = -3, r = 0,
+                                                     b = 150, l = 0),
+                                     size = 8),
+          axis.ticks.y=element_blank(),
+          axis.ticks.x=element_blank(),
+          plot.title = element_text(hjust = -0.1),
+          panel.grid.major = element_blank(),
+          panel.grid.minor = element_blank(),
+          panel.border = element_blank(),
+          panel.background = element_blank())
+  return(plt)
+}
 
+create_conf(N = 30)
 
-#Make matrices for white = good and orange = bad
-fin_dif <- fin %>% group_by(group) %>%
-  mutate(val, best_dif = ifelse(group == "actual no predicted no"|
-                                  group == "actual yes predicted yes",
-                                (abs(max(val) - val)), #best_dif is for assigning colors
-                                (abs(min(val) - val)))) 
-
-#Facet titles
-facet_names <- list(
-  'mk'="Mann-Kendall",
-  'pw'="MK-TFPW",
-  'gls'="GLS"
-)
-
-#plot
-ggplot(data = fin_dif, aes(x,y, fill = best_dif)) +
-  facet_grid(. ~ test, labeller = label)+
-  geom_tile(aes(size = 1),color = "grey", size = 1)  +
-  scale_fill_gradientn(colors = pal(10))+
-  geom_text(aes(x = x, y = y, label = round(val,3), size = 1),size = 4) +
-  theme(legend.position = "none",
-        axis.line = element_blank(),
-        axis.title=element_blank(),
-        axis.text.y = element_text(margin = margin(t = 0, r = -6,
-                                                   b = 0, l = 0),
-                                   size = 8),
-        axis.text.x = element_text(margin = margin(t = -3, r = 0,
-                                                   b = 150, l = 0),
-                                   size = 8),
-        axis.ticks.y=element_blank(),
-        axis.ticks.x=element_blank(),
-        plot.title = element_text(hjust = -0.1),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.border = element_blank(),
-        panel.background = element_blank())
 ```
 
 We next assessed the ability of each statistical approach to estimate the true trend (Figures \ref{Fig5} and \ref{Fig6}). In the nonparametric case, we used Sen's slope (as derived in Equation 8), which is a common statistic estimated alongside the MK and MK-TFPW significance tests. Sen's slope and the GLS estimator perform similarly across all scenarios. For both methods, the spread of estimated trends increased with autocorrelation strength, although this effect was mediated by increasing series length (e.g. Fig \ref{Fig6}). Further, trends falsely assigned in the "no trend" scenarios tended to have the largest spread. As shown by the black median lines in Figure \ref{Fig5}, both GLS and Sen's slope methods consistently overestimated trend slope when it existed, although both performed well under the strong autocorrelation scenario when trend was strong and N = 30.
 
 ```{r trend slope, fig.align="center", echo = F, fig.cap="Violin plots showing probability densities of estimated trends from GLS and Sen's slope procedures under varying autocorrelation scenarios $(\\rho = 0, 0.43, 0.8)$ and simulation lengths (N = 10, 20, 30). Black lines represent the median slope estimate, and red lines the true slope. For this exercise, the GLS model selection procedure was constrained to fit only linear models of trend.\\label{Fig5}"}
 
-load(file.path(data.dir,"sim_results2018-09-18.Rdata"))
 
-df <- sim_results %>% filter(!is.na(slope_pred), p < 0.05) 
 
-#set factor levels for plotting
-df$trend <- df %>% pull(trend) %>%
-  plyr::mapvalues(., from = c("notrend","ltrendweak","ltrendmed","ltrendstrong"),
-                  to = c("no trend","weak trend","medium trend","strong trend")) %>%
-  as.factor()
+df <- out_ar1_int %>% filter(!is.na(slope_pred), p < 0.05) 
 
-df$ar <- df %>% pull(ar) %>%
-  plyr::mapvalues(., from = c("NOAR","medAR","strongAR"),
-                  to = c("no AR","medium AR","strong AR")) %>%
-  as.factor()
-
-df$trend = factor(df$trend, levels=c('strong trend','medium trend','weak trend','no trend'))
-df$ar = factor(df$ar, levels=c('no AR','medium AR','strong AR'))
-df$series.length = factor(df$series.length, levels=c(10,20,30))
-names(df)[1] <- "Method"
 levels(df$Method) <- c("GLS","Mann-Kendall","Sen's slope")
 
 ggplot(df, aes(factor(series.length), slope_pred)) + 
-  geom_hline(aes(yintercept = slope_true), color = "red", size = 0.5) +
+  geom_hline(aes(yintercept = slope_true,linetype = "True trend"), color = "red", size = 0.5) +
   geom_violin(aes(fill = Method), adjust = 0.5, scale = "width",
               draw_quantiles = 0.5, size = 0.3) +
-  facet_grid(trend ~ ar) +
+  scale_linetype_manual(name = "", values = 1,
+                      guide = guide_legend(override.aes = list(color = "red"))) +
+  facet_grid(trend ~ rho1) +
   ylab("Predicted slope") +
   xlab("Series length") +
   scale_fill_brewer(palette = "PuBu") +
@@ -807,10 +937,10 @@ stdev <- NULL
 
 for (t in c("GLS","Sen's slope")){
   for (k in c(10,20,30)){
-    for (j in c('no trend','weak trend','medium trend','strong trend')){
-      for (i in c("no AR","medium AR","strong AR")){
+    for (j in c('No trend','Weak trend','Med. trend','Strong trend')){
+      for (i in c("No AR","Med. AR","Strong AR")){
         out <- sd(df[df$Method == t &df$series.length == k &
-                       df$trend == j & df$ar == i, ]$slope_pred)
+                       df$trend == j & df$rho1 == i, ]$slope_pred)
         
         out <- data.frame(stdev = out,
                           Autocorrelation = i,
@@ -866,7 +996,7 @@ ggplot(data = stdev) + geom_line(aes(x = Autocorrelation, y = stdev,
 
 
 ## Discussion
-Ecosystem reporting is vital to the development of Integrated Ecosystem Assessments (IEA), which lay out the framework for moving toward Ecosystem-Based Fishery Management (EBFM)[@Levin2009a]. The key analytical foundations to all IEA products revolve around the concept of indicator change; with managers most interested in short-term, abrupt changes to indicator status [@Wagner2013]. Here we addressed the shortcomings of assigning significant trends to indicator time series given the common problems of small sample size and autocorrelation. Our results show that statistical methods commonly used to detect trend in the presence of autocorrelated residuals may be misleading when applied to short time series.
+Ecosystem reporting is vital to the development of Integrated Ecosystem Assessments (IEA), which lay out the framework for moving toward Ecosystem-Based Fishery Management (EBFM)[@Levin2009a]. The key analytical foundations to all IEA products revolve around the concept of indicator change; with managers most interested in short-term, abrupt changes to indicator status [@Wagner2013]. However, the capacity for analysts to deliver rigorous and actionable insights is made more complicated by the nature of ecosystem data, which tends to a) be autocorrelated in time and space [@beale2010], and b) lie within systems changing rapidly in response to climate change and/or anthropogenic pressures [@kleisner2017]. Whether through qualitative [e.g. @zador2017] or quantitative [e.g. @plaganyi2014] methodologies for incorporating ecosystem information into management decisions, the barrier to entry for management action based on ecosystem indicators is one of change. Here we addressed the shortcomings of assigning significant trends to indicator time series given the common problems of small sample size and autocorrelation. Our results show that statistical methods commonly used to detect trend in the presence of autocorrelated residuals may be misleading when applied to short time series. 
 
 In the Northeast US, indicators considered in the ecosystem assessment process are annual data typically ranging between 10-60 years in length. In the context of hydrological literature, the upper limit of time series lengths seen in our indicator data sets would be considered short [@Bayazit2015]. This study highlights the dangers of assigning trends to short time series even while attempting to address problems of autocorrelation. The influence of autocorrelation in short series inevitably increases Type II error rates (the failure to identify trend when it exists). This was especially true under scenarios of strong autocorrelation, which effectively masked the detection of trend unless trend was strong and N was large. Possibly even more problematic, an increase in Type I error, or the false rejection of the null hypothesis, occurred as the strength of autocorrelation increased. A departure from nominal rejection rates was seen from all tests with even moderate amounts of autocorrelation.
 
