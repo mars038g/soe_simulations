@@ -4,7 +4,8 @@ library(nlme)
 library(Kendall)
 library(zyp)
 
-load("sim_param.rdata")
+data.dir <- here::here("data.dir")
+load(file.path(data.dir,"sim_param.rdata"))
 
 test.series <- function(ar.order,
                         rho,
