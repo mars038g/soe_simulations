@@ -238,7 +238,8 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)) +
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8)) +
   labs(tag = "A")
 
  ar1 <- ggplot(data = ar1.out, aes(x = ar1)) +
@@ -256,7 +257,8 @@ beta <- ggplot(data = lin_coefficients, aes(x = abs(beta1))) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)) +
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8)) +
   labs(tag = "B")
 
 iv <- ggplot(data = ar1.out, aes(x = var)) +
@@ -275,12 +277,13 @@ iv <- ggplot(data = ar1.out, aes(x = var)) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10)) +
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8)) +
   labs(tag = "C")
 
 param_plots <- cowplot::plot_grid(beta, ar1, iv, nrow = 1)
 
-ggsave(param_plots,filename = "figures/fig1-parameters.tiff", device = "tiff", dpi = 300)
+ggsave(param_plots,filename = "figures/fig1-parameters.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 50)
 ```
 
 
@@ -512,8 +515,9 @@ agg_ar1_plt <- ggplot(agg_out_ar1,aes(color = Method, y = prop,
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
-ggsave(agg_ar1_plt,filename = "figures/fig2-ar1.tiff", device = "tiff", dpi = 300)
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8))
+ggsave(agg_ar1_plt,filename = "figures/fig2-ar1.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 130)
 ```
 
 ```{r power analysis var, echo = F, fig.align='center',fig.cap="Barplots showing the propotion of significant trends (\\textit{P}<0.05) to number of total simulations. Subplots are representative of different autocorrelation ($\\rho = 0, .43, .8$) and trend scenarios ($\\alpha_{1} = 0.026, .051$), with time series length increasing along the x axis. Colored bars show results from different tests for trend. \\label{Fig2}"}
@@ -563,7 +567,7 @@ iq_variance_plt <- iq_variance_sim %>%
   #                 color = series.length,
   #                group = var3),size = 1) +
   guides(color = F,
-         shape = guide_legend(title = "Sim. variance"))+
+         shape = guide_legend(title = "Sim. variance", size = 8))+
   facet_grid(trend ~ rho1) +
   ylab("Proportion significant") +
   xlab("Test") +
@@ -575,10 +579,12 @@ iq_variance_plt <- iq_variance_sim %>%
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
         strip.text = element_text(size = 10),
-        axis.text.x = element_text(angle = 45, vjust = 0.6))
+        axis.text.x = element_text(angle = 45, vjust = 0.6),
+        legend.text = element_text(size = 8),
+        legend.title = element_text(size = 9))
 
 
-ggsave(iq_variance_plt,filename = "figures/fig5-iq-variance-sims.tiff", device = "tiff", dpi = 300)
+ggsave(iq_variance_plt,filename = "figures/fig5-iq-variance-sims.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 70)
 ```
 
 
@@ -603,8 +609,9 @@ ggplot(aes(x = series.length,
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
-ggsave(ar1_extended,filename = "figures/fig3-ar1-extended.tiff", device = "tiff", dpi = 300)
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8))
+ggsave(ar1_extended,filename = "figures/fig3-ar1-extended.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 50)
 ```
 
 
@@ -625,9 +632,10 @@ ar2_plt <- ggplot(agg_out_ar2,aes(color = Method, y = prop,
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8))
 
-ggsave(ar2_plt,filename = "figures/fig6-ar2-sims.tiff", device = "tiff", dpi = 300)
+ggsave(ar2_plt,filename = "figures/fig6-ar2-sims.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 50)
 ```
 
 ```{r confusion matrices, echo = F, fig.align='center', out.extra='trim={0cm 5cm 0cm 0cm},clip', fig.cap= 'Confusion matrices showing aggregate results from testing for trend across all combinations autocorrelation and trend strength when N=30. Colors represent the performance of individual cells across tests, where cells shaded in red indicate a poorer outcome. For example, when N=30, the GLS procedure falsely predicted a trend when there was none in 11.1\\% of cases (white), whereas this was true in 22.1\\% of Mann-Kendall simulations (red).\\label{Fig4}' }
@@ -654,7 +662,7 @@ create_conf <- function(N){
     facet_grid(. ~ test)+
     geom_tile(aes(size = 1),color = "grey", size = 1)  +
     scale_fill_gradientn(colors = pal(10))+
-    geom_text(aes(x = x, y = y, label = round(val,3)),size = 6) +
+    geom_text(aes(x = x, y = y, label = round(val,3)),size = 5) +
     theme(legend.position = "none",
           axis.line = element_blank(),
           axis.title=element_blank(),
@@ -677,7 +685,7 @@ create_conf <- function(N){
 
 conf_mat <- create_conf(N = 30)
 
-ggsave(conf_mat,filename = "figures/fig4-conf-mat.tiff", device = "tiff", dpi = 300)
+ggsave(conf_mat,filename = "figures/fig4-conf-mat.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 70)
 ```
 
 ```{r trend slope, fig.align="center", echo = F, fig.cap="Violin plots showing probability densities of estimated trends from GLS and Sen's slope procedures under varying autocorrelation scenarios $(\\rho = 0, 0.43, 0.8)$ and simulation lengths (N = 10, 20, 30). Black lines represent the median slope estimate, and red lines the true slope. For this exercise, the GLS model selection procedure was constrained to fit only linear models of trend.\\label{Fig5}"}
@@ -701,8 +709,9 @@ trend_magnitude <- ggplot(df, aes(factor(series.length), slope_pred)) +
         strip.background = element_blank(),
         axis.text = element_text(size = 9),
         axis.title = element_text(size = 10),
-        strip.text = element_text(size = 10))
-ggsave(trend_magnitude,filename = "figures/fig7-trend-magnitude.tiff", device = "tiff", dpi = 300)
+        strip.text = element_text(size = 10),
+        legend.text = element_text(size = 8))
+ggsave(trend_magnitude,filename = "figures/fig7-trend-magnitude.tiff", device = "tiff", dpi = 500, units = "mm", width = 170, height = 130)
 ```
 
 
